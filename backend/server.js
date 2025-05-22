@@ -26,6 +26,8 @@ const auth = require('./routes/auth');
 const projects = require('./routes/projects');
 const tasks = require('./routes/tasks');
 const users = require('./routes/users');
+const documents = require('./routes/documents');
+const folders = require('./routes/folders');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -79,6 +81,8 @@ app.use('/api/v1/auth', auth);
 app.use('/api/v1/projects', projects);
 app.use('/api/v1/tasks', tasks);
 app.use('/api/v1/users', users);
+app.use('/api/v1/documents', documents);
+app.use('/api/v1/folders', folders);
 
 // Basic route
 app.get('/api', (req, res) => {
@@ -92,7 +96,9 @@ app.get('/api', (req, res) => {
       '/api/v1/auth',
       '/api/v1/projects',
       '/api/v1/tasks',
-      '/api/v1/users'
+      '/api/v1/users',
+      '/api/v1/documents',
+      '/api/v1/folders'
     ]
   });
 });
