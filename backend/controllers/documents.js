@@ -13,7 +13,7 @@ exports.uploadDocument = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Please upload a file', 400));
   }
 
-  const { name, description, folder, project, tags } = req.body;
+  const { name, description, folder, project, tags, changes = 'Initial version' } = req.body;
   const tagsArray = tags ? tags.split(',').map(tag => tag.trim()) : [];
 
   // Check if folder exists if provided
@@ -36,6 +36,8 @@ exports.uploadDocument = asyncHandler(async (req, res, next) => {
     project: project || null,
     tags: tagsArray,
     createdBy: req.user.id,
+    updatedBy: req.user.id,
+    changes,
     access: [{
       user: req.user.id,
       permission: 'manage'
@@ -94,14 +96,16 @@ exports.getDocuments = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Get single document
+// @desc    Get document by ID
 // @route   GET /api/v1/documents/:id
 // @access  Private
 exports.getDocument = asyncHandler(async (req, res, next) => {
   const document = await Document.findById(req.params.id)
     .populate('createdBy', 'name email')
+    .populate('updatedBy', 'name email')
     .populate('folder', 'name')
-    .populate('project', 'name');
+    .populate('project', 'name')
+    .populate('versions.uploadedBy', 'name email');
 
   if (!document) {
     return next(
@@ -109,16 +113,120 @@ exports.getDocument = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Check if user has access to this document
-  const hasAccess = document.createdBy._id.toString() === req.user.id || 
-                   document.access.some(a => a.user.toString() === req.user.id);
-  
-  if (!hasAccess) {
+  // Check if user has access
+  if (
+    document.createdBy._id.toString() !== req.user.id &&
+    !document.access.some(a => a.user.toString() === req.user.id)
+  ) {
     return next(
-      new ErrorResponse(`Not authorized to access this document`, 401)
+      new ErrorResponse(
+        `User ${req.user.id} is not authorized to access this document`,
+        401
+      )
     );
   }
 
+  res.status(200).json({
+    success: true,
+    data: document
+  });
+});
+
+// @desc    Get document versions
+// @route   GET /api/v1/documents/:id/versions
+// @access  Private
+exports.getDocumentVersions = asyncHandler(async (req, res, next) => {
+  const document = await Document.findById(req.params.id)
+    .select('versions')
+    .populate('versions.uploadedBy', 'name email');
+
+  if (!document) {
+    return next(
+      new ErrorResponse(`Document not found with id of ${req.params.id}`, 404)
+    );
+  }
+
+  // Check if user has access
+  if (
+    document.createdBy.toString() !== req.user.id &&
+    !document.access.some(a => a.user.toString() === req.user.id)
+  ) {
+    return next(
+      new ErrorResponse(
+        `User ${req.user.id} is not authorized to access this document`,
+        401
+      )
+    );
+  }
+
+  res.status(200).json({
+    success: true,
+    count: document.versions.length,
+    data: document.versions.sort((a, b) => b.versionNumber - a.versionNumber)
+  });
+});
+
+// @desc    Restore document version
+// @route   PUT /api/v1/documents/:id/versions/:versionNumber/restore
+// @access  Private
+exports.restoreDocumentVersion = asyncHandler(async (req, res, next) => {
+  const document = await Document.findById(req.params.id);
+
+  if (!document) {
+    return next(
+      new ErrorResponse(`Document not found with id of ${req.params.id}`, 404)
+    );
+  }
+
+  // Check if user has edit access
+  if (
+    document.createdBy.toString() !== req.user.id &&
+    !document.access.some(a => 
+      a.user.toString() === req.user.id && ['edit', 'manage'].includes(a.permission)
+    )
+  ) {
+    return next(
+      new ErrorResponse(
+        `User ${req.user.id} is not authorized to update this document`,
+        401
+      )
+    );
+  }
+
+  const versionNumber = parseInt(req.params.versionNumber);
+  const version = document.versions.find(v => v.versionNumber === versionNumber);
+  
+  if (!version) {
+    return next(
+      new ErrorResponse(`Version ${versionNumber} not found for document ${req.params.id}`, 404)
+    );
+  }
+  
+  // Create a new version with the restored content
+  const newVersion = {
+    versionNumber: document.currentVersion + 1,
+    fileUrl: version.fileUrl,
+    fileType: version.fileType,
+    fileSize: version.fileSize,
+    uploadedBy: req.user.id,
+    changes: `Restored from version ${versionNumber}`,
+    isCurrent: true
+  };
+  
+  // Mark all other versions as not current
+  document.versions.forEach(v => {
+    v.isCurrent = false;
+  });
+  
+  document.versions.push(newVersion);
+  document.currentVersion = newVersion.versionNumber;
+  document.fileUrl = version.fileUrl;
+  document.fileType = version.fileType;
+  document.fileSize = version.fileSize;
+  document.updatedBy = req.user.id;
+  
+  await document.save();
+  
   res.status(200).json({
     success: true,
     data: document
@@ -137,29 +245,59 @@ exports.updateDocument = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Make sure user is document owner or has manage access
-  const userAccess = document.access.find(a => a.user.toString() === req.user.id);
-  if (document.createdBy.toString() !== req.user.id && 
-      (!userAccess || !['edit', 'manage'].includes(userAccess.permission))) {
+  // Make sure user is document owner or has edit access
+  if (
+    document.createdBy.toString() !== req.user.id &&
+    !document.access.some(a => 
+      a.user.toString() === req.user.id && ['edit', 'manage'].includes(a.permission)
+    )
+  ) {
     return next(
-      new ErrorResponse(`User ${req.user.id} is not authorized to update this document`, 401)
+      new ErrorResponse(
+        `User ${req.user.id} is not authorized to update this document`,
+        401
+      )
     );
   }
 
-  // Check if folder exists if being updated
-  if (req.body.folder) {
-    const folderExists = await Folder.findById(req.body.folder);
-    if (!folderExists) {
-      return next(new ErrorResponse(`No folder with the id of ${req.body.folder}`, 404));
+  // Handle file upload if present
+  if (req.file) {
+    // Keep old file path for versioning
+    const oldFileUrl = document.fileUrl;
+    
+    // Update document with new file info
+    document.fileUrl = `/uploads/documents/${req.file.filename}`;
+    document.fileType = req.file.mimetype;
+    document.fileSize = req.file.size;
+    document.updatedBy = req.user.id;
+    document.changes = req.body.changes || 'Updated file';
+    
+    // Save will trigger the versioning middleware
+    document = await document.save();
+    
+    // Delete old file after successful versioning
+    try {
+      const oldFilePath = path.join(__dirname, '../..', oldFileUrl);
+      if (fs.existsSync(oldFilePath)) {
+        fs.unlinkSync(oldFilePath);
+      }
+    } catch (err) {
+      console.error('Error deleting old file:', err);
     }
+    
+    return res.status(200).json({
+      success: true,
+      data: document
+    });
   }
-
-  // Update document
+  
+  // For non-file updates
+  req.body.updatedBy = req.user.id;
   document = await Document.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true
   });
-
+  
   res.status(200).json({
     success: true,
     data: document

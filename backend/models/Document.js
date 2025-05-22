@@ -1,14 +1,9 @@
 const mongoose = require('mongoose');
 
-const DocumentSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Please add a document name'],
-    trim: true
-  },
-  description: {
-    type: String,
-    trim: true
+const VersionSchema = new mongoose.Schema({
+  versionNumber: {
+    type: Number,
+    required: true
   },
   fileUrl: {
     type: String,
@@ -22,6 +17,36 @@ const DocumentSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  uploadedBy: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  changes: {
+    type: String,
+    trim: true
+  },
+  isCurrent: {
+    type: Boolean,
+    default: false
+  }
+}, { timestamps: true });
+
+const DocumentSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Please add a document name'],
+    trim: true
+  },
+  description: {
+    type: String,
+    trim: true
+  },
+  currentVersion: {
+    type: Number,
+    default: 1
+  },
+  versions: [VersionSchema],
   folder: {
     type: mongoose.Schema.ObjectId,
     ref: 'Folder',
@@ -63,6 +88,45 @@ DocumentSchema.index({
   name: 'text', 
   description: 'text', 
   tags: 'text' 
+});
+
+// Add index for faster version lookups
+DocumentSchema.index({ 'versions.versionNumber': 1 });
+DocumentSchema.index({ 'versions.isCurrent': 1 });
+
+// Middleware to handle versioning
+DocumentSchema.pre('save', async function(next) {
+  if (this.isNew) {
+    // For new documents, create the first version
+    this.versions.push({
+      versionNumber: 1,
+      fileUrl: this.fileUrl,
+      fileType: this.fileType,
+      fileSize: this.fileSize,
+      uploadedBy: this.createdBy,
+      changes: 'Initial version',
+      isCurrent: true
+    });
+  } else if (this.isModified('fileUrl') || this.isModified('fileType') || this.isModified('fileSize')) {
+    // When file is updated, create a new version
+    const newVersion = {
+      versionNumber: this.currentVersion + 1,
+      fileUrl: this.fileUrl,
+      fileType: this.fileType,
+      fileSize: this.fileSize,
+      uploadedBy: this.updatedBy || this.createdBy,
+      isCurrent: true
+    };
+    
+    // Mark all other versions as not current
+    this.versions.forEach(version => {
+      version.isCurrent = false;
+    });
+    
+    this.versions.push(newVersion);
+    this.currentVersion = newVersion.versionNumber;
+  }
+  next();
 });
 
 // Cascade delete documents when a folder is deleted

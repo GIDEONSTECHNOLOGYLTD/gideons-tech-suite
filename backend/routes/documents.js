@@ -8,7 +8,9 @@ const {
   uploadDocument,
   updateDocument,
   deleteDocument,
-  downloadDocument
+  downloadDocument,
+  getDocumentVersions,
+  restoreDocumentVersion
 } = require('../controllers/documents');
 
 // Public routes (none for documents)
@@ -29,8 +31,18 @@ router
   .put(updateDocument)
   .delete(deleteDocument);
 
+// /api/v1/documents/:id/versions
+router
+  .route('/:id/versions')
+  .get(getDocumentVersions);
+
+// /api/v1/documents/:id/versions/:versionNumber/restore
+router
+  .route('/:id/versions/:versionNumber/restore')
+  .put(restoreDocumentVersion);
+
 // /api/v1/documents/:id/download
-get('/:id/download', downloadDocument);
+router.get('/:id/download', downloadDocument);
 
 // /api/v1/projects/:projectId/documents
 router.use('/projects/:projectId', require('./projectDocuments'));
