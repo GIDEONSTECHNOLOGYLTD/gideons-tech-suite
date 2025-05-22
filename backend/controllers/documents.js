@@ -201,35 +201,34 @@ exports.deleteDocument = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Download document
+// @desc    Download a document
 // @route   GET /api/v1/documents/:id/download
 // @access  Private
 exports.downloadDocument = asyncHandler(async (req, res, next) => {
-  const document = await Document.findById(req.params.id);
+  try {
+    const document = await Document.findById(req.params.id);
 
-  if (!document) {
-    return next(
-      new ErrorResponse(`Document not found with id of ${req.params.id}`, 404)
-    );
-  }
+    if (!document) {
+      return next(new ErrorResponse('Document not found', 404));
+    }
 
-  // Check if user has access to this document
-  const hasAccess = document.createdBy._id.toString() === req.user.id || 
+    const hasAccess = document.createdBy._id.toString() === req.user.id || 
                    document.access.some(a => a.user.toString() === req.user.id);
   
-  if (!hasAccess) {
-    return next(
-      new ErrorResponse(`Not authorized to access this document`, 401)
-    );
-  }
+    if (!hasAccess) {
+      return next(
+        new ErrorResponse(`Not authorized to access this document`, 401)
+      );
+    }
 
-  const filePath = path.join(__dirname, `../../public${document.fileUrl}`);
-  
-  if (!fs.existsSync(filePath)) {
-    return next(
-      new ErrorResponse('File not found', 404)
-    );
-  }
+    const filePath = path.join(__dirname, `../../public${document.fileUrl}`);
+    
+    if (!fs.existsSync(filePath)) {
+      return next(new ErrorResponse('File not found', 404));
+    }
 
-  res.download(filePath, document.name);
+    res.download(filePath, document.name);
+  } catch (err) {
+    next(err);
+  }
 });
