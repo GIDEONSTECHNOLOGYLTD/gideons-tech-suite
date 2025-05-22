@@ -10,8 +10,13 @@ const {
   deleteDocument,
   downloadDocument,
   getDocumentVersions,
-  restoreDocumentVersion
+  restoreDocumentVersion,
+  shareDocument,
+  removeDocumentAccess
 } = require('../controllers/documents');
+
+// Import tag routes
+const tagRouter = require('./tags');
 
 // Public routes (none for documents)
 
@@ -40,6 +45,19 @@ router
 router
   .route('/:id/versions/:versionNumber/restore')
   .put(restoreDocumentVersion);
+
+// /api/v1/documents/:id/share
+router
+  .route('/:id/share')
+  .post(shareDocument);
+
+// /api/v1/documents/:id/share/:userId
+router
+  .route('/:id/share/:userId')
+  .delete(removeDocumentAccess);
+
+// Re-route into tag router
+router.use('/:documentId/tags', tagRouter);
 
 // /api/v1/documents/:id/download
 router.get('/:id/download', downloadDocument);

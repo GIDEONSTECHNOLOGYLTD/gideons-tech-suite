@@ -32,6 +32,24 @@ const VersionSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+const TagSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+    lowercase: true
+  },
+  color: {
+    type: String,
+    default: '#808080'
+  },
+  createdBy: {
+    type: mongoose.Schema.ObjectId,
+    ref: 'User',
+    required: true
+  }
+}, { timestamps: true });
+
 const DocumentSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -53,8 +71,8 @@ const DocumentSchema = new mongoose.Schema({
     default: null
   },
   tags: [{
-    type: String,
-    trim: true
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tag'
   }],
   createdBy: {
     type: mongoose.Schema.ObjectId,
@@ -135,4 +153,10 @@ DocumentSchema.pre('remove', async function(next) {
   next();
 });
 
-module.exports = mongoose.model('Document', DocumentSchema);
+// Create Tag model
+const Tag = mongoose.model('Tag', TagSchema);
+
+// Create Document model
+const Document = mongoose.model('Document', DocumentSchema);
+
+module.exports = { Document, Tag };
