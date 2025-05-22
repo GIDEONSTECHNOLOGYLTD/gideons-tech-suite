@@ -6,106 +6,280 @@ const asyncHandler = require('../middleware/async');
 const path = require('path');
 const fs = require('fs');
 
-// @desc    Upload a document
-// @route   POST /api/v1/documents
-// @access  Private
+/**
+ * Process and validate tags
+ * @param {Array} tags - Array of tag names
+ * @param {String} userId - ID of the user creating/updating the document
+ * @returns {Promise<Array>} Array of tag IDs
+ */
+const processTags = async (tags = [], userId) => {
+  if (!Array.isArray(tags)) {
+    throw new ErrorResponse('Tags must be an array', 400);
+  }
+
+  const processedTags = [];
+  
+  for (const tagName of tags) {
+    if (typeof tagName !== 'string' || tagName.trim() === '') {
+      throw new ErrorResponse('Tag name must be a non-empty string', 400);
+    }
+
+    const normalizedTagName = tagName.trim().toLowerCase();
+    
+    // Find or create tag
+    let tag = await Tag.findOneAndUpdate(
+      { name: normalizedTagName, createdBy: userId },
+      { 
+        $setOnInsert: { 
+          name: normalizedTagName,
+          createdBy: userId,
+          color: `#${Math.floor(Math.random()*16777215).toString(16).padEnd(6, '0')}`
+        }
+      },
+      { 
+        new: true, 
+        upsert: true, 
+        setDefaultsOnInsert: true 
+      }
+    );
+    
+    if (tag) {
+      processedTags.push(tag._id);
+    }
+  }
+  
+  return processedTags;
+};
+
+/**
+ * @desc    Upload a document
+ * @route   POST /api/v1/documents
+ * @access  Private
+ */
 exports.uploadDocument = asyncHandler(async (req, res, next) => {
   if (!req.file) {
     return next(new ErrorResponse('Please upload a file', 400));
   }
 
-  const { name, description, folder, project, tagIds, changes = 'Initial version' } = req.body;
+  const { name, description, folder, project, tags: tagNames = [], changes = 'Initial version' } = req.body;
+  const file = req.file;
   
-  // Validate tags if provided
-  let tags = [];
-  if (tagIds) {
-    const tagIdsArray = Array.isArray(tagIds) ? tagIds : tagIds.split(',');
-    
-    // Verify all tags exist and belong to the user
-    const existingTags = await Tag.find({
-      _id: { $in: tagIdsArray },
-      createdBy: req.user.id
+  // Validate file type
+  const allowedFileTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'text/plain'];
+  
+  if (!allowedFileTypes.includes(file.mimetype)) {
+    fs.unlinkSync(file.path);
+    return next(new ErrorResponse(
+      `File type not supported. Supported types: ${allowedFileTypes.join(', ')}`,
+      400
+    ));
+  }
+
+  // Validate file size (max 10MB)
+  const maxFileSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxFileSize) {
+    fs.unlinkSync(file.path);
+    return next(new ErrorResponse(
+      `File size cannot be more than ${(maxFileSize / (1024 * 1024)).toFixed(2)}MB`,
+      400
+    ));
+  }
+
+  try {
+    // Process tags if provided
+    const tagIds = await processTags(tagNames, req.user.id);
+
+    // Check if folder exists if provided
+    if (folder) {
+      const folderExists = await Folder.findOne({
+        _id: folder,
+        $or: [
+          { createdBy: req.user.id },
+          { 'collaborators.user': req.user.id }
+        ]
+      });
+      
+      if (!folderExists) {
+        fs.unlinkSync(file.path);
+        return next(new ErrorResponse(`No access to folder with id ${folder}`, 403));
+      }
+    }
+
+    // Create document
+    const document = new Document({
+      name: name || file.originalname,
+      description,
+      fileUrl: `/uploads/documents/${file.filename}`,
+      fileType: file.mimetype,
+      fileSize: file.size,
+      folder: folder || null,
+      project: project || null,
+      tags: tagIds,
+      createdBy: req.user.id,
+      updatedBy: req.user.id,
+      changes,
+      access: [{
+        user: req.user.id,
+        permission: 'manage',
+        grantedAt: new Date()
+      }],
+      versions: [{
+        version: 1,
+        fileUrl: `/uploads/documents/${file.filename}`,
+        fileType: file.mimetype,
+        fileSize: file.size,
+        uploadedBy: req.user.id,
+        changes: 'Initial version',
+        uploadedAt: new Date()
+      }]
     });
-    
-    if (existingTags.length !== tagIdsArray.length) {
-      fs.unlinkSync(req.file.path); // Clean up uploaded file
-      return next(new ErrorResponse('One or more tags not found', 404));
-    }
-    
-    tags = tagIdsArray;
-  }
 
-  // Check if folder exists if provided
-  if (folder) {
-    const folderExists = await Folder.findById(folder);
-    if (!folderExists) {
-      // Delete the uploaded file
+    await document.save();
+    
+    // Populate related fields for the response
+    await document
+      .populate('tags', 'name color')
+      .populate('createdBy', 'name email')
+      .populate('updatedBy', 'name email')
+      .execPopulate();
+
+    res.status(201).json({
+      success: true,
+      data: document
+    });
+
+  } catch (error) {
+    // Clean up uploaded file if there was an error
+    if (req.file && fs.existsSync(req.file.path)) {
       fs.unlinkSync(req.file.path);
-      return next(new ErrorResponse(`No folder with the id of ${folder}`, 404));
     }
+    next(error);
   }
-
-  const document = await Document.create({
-    name: name || req.file.originalname,
-    description,
-    fileUrl: `/uploads/documents/${req.file.filename}`,
-    fileType: req.file.mimetype,
-    fileSize: req.file.size,
-    folder: folder || null,
-    project: project || null,
-    tags,
-    createdBy: req.user.id,
-    updatedBy: req.user.id,
-    changes,
-    access: [{
-      user: req.user.id,
-      permission: 'manage'
-    }]
-  });
-  
-  // Populate tags for the response
-  await document.populate('tags', 'name color');
-
-  res.status(201).json({
-    success: true,
-    data: document
-  });
 });
 
-// @desc    Get all documents
-// @route   GET /api/v1/documents
-// @access  Private
-exports.getDocuments = asyncHandler(async (req, res, next) => {
-  // Check for project filter
-  if (req.params.projectId) {
-    // Check if user has access to this project
-    // This would be implemented based on your project access control
-    
-    const documents = await Document.find({ 
-      project: req.params.projectId,
-      $or: [
-        { createdBy: req.user.id },
-        { 'access.user': req.user.id }
-      ]
-    })
-    $or: [
-      { createdBy: req.user.id },
-      { 'access.user': req.user.id }
-    ]
-  };
+/**
+ * @desc    Update document details
+ * @route   PUT /api/v1/documents/:id
+ * @access  Private
+ */
+exports.updateDocument = asyncHandler(async (req, res, next) => {
+  const { name, description, tags: tagNames, changes } = req.body;
+  const file = req.file;
   
-  // Filter by tag if provided
-  if (tag) {
-    query.tags = tag;
+  let document = await Document.findOne({
+    _id: req.params.id,
+    'access.user': req.user.id,
+    'access.permission': { $in: ['edit', 'manage'] }
+  });
+
+  if (!document) {
+    if (file) fs.unlinkSync(file.path);
+    return next(new ErrorResponse('Document not found or insufficient permissions', 404));
+  }
+
+  try {
+    // Process tags if provided
+    let tagIds = [...document.tags];
+    if (tagNames) {
+      tagIds = await processTags(tagNames, req.user.id);
+    }
+
+    // Handle file upload if new file is provided
+    let fileUpdate = {};
+    if (file) {
+      // Delete old file if it exists
+      if (document.fileUrl && fs.existsSync(path.join(__dirname, '..', document.fileUrl))) {
+        fs.unlinkSync(path.join(__dirname, '..', document.fileUrl));
+      }
+      
+      fileUpdate = {
+        fileUrl: `/uploads/documents/${file.filename}`,
+        fileType: file.mimetype,
+        fileSize: file.size
+      };
+
+      // Add new version
+      document.versions.push({
+        version: document.versions.length + 1,
+        fileUrl: `/uploads/documents/${file.filename}`,
+        fileType: file.mimetype,
+        fileSize: file.size,
+        uploadedBy: req.user.id,
+        changes: changes || 'Document updated',
+        uploadedAt: new Date()
+      });
+    }
+
+    // Update document
+    document.name = name || document.name;
+    document.description = description !== undefined ? description : document.description;
+    document.tags = tagIds;
+    document.updatedBy = req.user.id;
+    document.updatedAt = new Date();
+    
+    if (Object.keys(fileUpdate).length > 0) {
+      Object.assign(document, fileUpdate);
+    }
+
+    await document.save();
+    
+    // Populate related fields for the response
+    await document
+      .populate('tags', 'name color')
+      .populate('createdBy', 'name email')
+      .populate('updatedBy', 'name email')
+      .execPopulate();
+
+    res.status(200).json({
+      success: true,
+      data: document
+    });
+
+  } catch (error) {
+    if (file) fs.unlinkSync(file.path);
+    next(error);
+  }
+});
+
+/**
+ * @desc    Get all documents
+ * @route   GET /api/v1/documents
+ * @access  Private
+ */
+exports.getDocuments = asyncHandler(async (req, res, next) => {
+  // Filter by tags if provided
+  const { tags, folder, project, search } = req.query;
+  const query = {};
+  
+  // Only return documents the user has access to
+  query['access.user'] = req.user.id;
+  
+  if (tags) {
+    query.tags = { $in: tags.split(',') };
   }
   
-  // Get documents that the user has access to
+  if (folder) {
+    query.folder = folder;
+  }
+  
+  if (project) {
+    query.project = project;
+  }
+  
+  if (search) {
+    query.$text = { $search: search };
+  }
+  
   const documents = await Document.find(query)
-    .populate('createdBy', 'name email')
-    .populate('folder', 'name')
     .populate('tags', 'name color')
-    .sort('-createdAt');
-
+    .populate('createdBy', 'name email')
+    .populate('updatedBy', 'name email')
+    .sort('-updatedAt');
+  
   res.status(200).json({
     success: true,
     count: documents.length,
@@ -113,414 +287,293 @@ exports.getDocuments = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Get document by ID
-// @route   GET /api/v1/documents/:id
-// @access  Private
+/**
+ * @desc    Get single document
+ * @route   GET /api/v1/documents/:id
+ * @access  Private
+ */
 exports.getDocument = asyncHandler(async (req, res, next) => {
-  const document = await Document.findById(req.params.id)
-    .populate('createdBy', 'name email')
-    .populate('updatedBy', 'name email')
-    .populate('folder', 'name')
-    .populate('project', 'name')
+  const document = await Document.findOne({
+    _id: req.params.id,
+    'access.user': req.user.id
+  })
     .populate('tags', 'name color')
-    .populate('versions.uploadedBy', 'name email');
-
+    .populate('createdBy', 'name email')
+    .populate('updatedBy', 'name email');
+  
   if (!document) {
-    return next(
-      new ErrorResponse(`Document not found with id of ${req.params.id}`, 404)
-    );
+    return next(new ErrorResponse('Document not found or insufficient permissions', 404));
   }
-
-  // Check if user has access
-  if (
-    document.createdBy._id.toString() !== req.user.id &&
-    !document.access.some(a => a.user.toString() === req.user.id)
-  ) {
-    return next(
-      new ErrorResponse(
-        `User ${req.user.id} is not authorized to access this document`,
-        401
-      )
-    );
-  }
-
+  
   res.status(200).json({
     success: true,
     data: document
   });
 });
 
-// @desc    Get document versions
-// @route   GET /api/v1/documents/:id/versions
-// @access  Private
-exports.getDocumentVersions = asyncHandler(async (req, res, next) => {
-  const document = await Document.findById(req.params.id)
-    .select('versions')
-    .populate('versions.uploadedBy', 'name email');
-
-  if (!document) {
-    return next(
-      new ErrorResponse(`Document not found with id of ${req.params.id}`, 404)
-    );
-  }
-
-  // Check if user has access
-  if (
-    document.createdBy.toString() !== req.user.id &&
-    !document.access.some(a => a.user.toString() === req.user.id)
-  ) {
-    return next(
-      new ErrorResponse(
-        `User ${req.user.id} is not authorized to access this document`,
-        401
-      )
-    );
-  }
-
-  res.status(200).json({
-    success: true,
-    count: document.versions.length,
-    data: document.versions.sort((a, b) => b.versionNumber - a.versionNumber)
+/**
+ * @desc    Delete document
+ * @route   DELETE /api/v1/documents/:id
+ * @access  Private
+ */
+exports.deleteDocument = asyncHandler(async (req, res, next) => {
+  const document = await Document.findOne({
+    _id: req.params.id,
+    'access.user': req.user.id,
+    'access.permission': 'manage'
   });
+  
+  if (!document) {
+    return next(new ErrorResponse('Document not found or insufficient permissions', 404));
+  }
+  
+  try {
+    // Delete the file from storage
+    if (document.fileUrl && fs.existsSync(path.join(__dirname, '..', document.fileUrl))) {
+      fs.unlinkSync(path.join(__dirname, '..', document.fileUrl));
+    }
+    
+    // Delete all versions
+    for (const version of document.versions) {
+      if (version.fileUrl && fs.existsSync(path.join(__dirname, '..', version.fileUrl))) {
+        fs.unlinkSync(path.join(__dirname, '..', version.fileUrl));
+      }
+    }
+    
+    await document.remove();
+    
+    res.status(200).json({
+      success: true,
+      data: {}
+    });
+    
+  } catch (error) {
+    next(error);
+  }
 });
 
-// @desc    Restore document version
-// @route   PUT /api/v1/documents/:id/versions/:versionNumber/restore
-// @access  Private
-exports.restoreDocumentVersion = asyncHandler(async (req, res, next) => {
-  const document = await Document.findById(req.params.id);
-
-  if (!document) {
-    return next(
-      new ErrorResponse(`Document not found with id of ${req.params.id}`, 404)
-    );
-  }
-
-  // Check if user has edit access
-  if (
-    document.createdBy.toString() !== req.user.id &&
-    !document.access.some(a => 
-      a.user.toString() === req.user.id && ['edit', 'manage'].includes(a.permission)
-    )
-  ) {
-    return next(
-      new ErrorResponse(
-        `User ${req.user.id} is not authorized to update this document`,
-        401
-      )
-    );
-  }
-
-  const versionNumber = parseInt(req.params.versionNumber);
-  const version = document.versions.find(v => v.versionNumber === versionNumber);
+/**
+ * @desc    Share document with another user
+ * @route   POST /api/v1/documents/:id/share
+ * @access  Private
+ */
+exports.shareDocument = asyncHandler(async (req, res, next) => {
+  const { userId, permission } = req.body;
   
-  if (!version) {
-    return next(
-      new ErrorResponse(`Version ${versionNumber} not found for document ${req.params.id}`, 404)
-    );
+  if (!['view', 'edit', 'manage'].includes(permission)) {
+    return next(new ErrorResponse('Invalid permission level. Must be one of: view, edit, manage', 400));
   }
   
-  // Create a new version with the restored content
-  const newVersion = {
-    versionNumber: document.currentVersion + 1,
-    fileUrl: version.fileUrl,
-    fileType: version.fileType,
-    fileSize: version.fileSize,
-    uploadedBy: req.user.id,
-    changes: `Restored from version ${versionNumber}`,
-    isCurrent: true
-  };
+  // Check if user exists and is not the document owner
+  const user = await User.findById(userId);
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
   
-  // Mark all other versions as not current
-  document.versions.forEach(v => {
-    v.isCurrent = false;
+  if (userId === req.user.id) {
+    return next(new ErrorResponse('Cannot share with yourself', 400));
+  }
+  
+  const document = await Document.findOne({
+    _id: req.params.id,
+    'access.user': req.user.id,
+    'access.permission': 'manage'
   });
   
-  document.versions.push(newVersion);
-  document.currentVersion = newVersion.versionNumber;
-  document.fileUrl = version.fileUrl;
-  document.fileType = version.fileType;
-  document.fileSize = version.fileSize;
+  if (!document) {
+    return next(new ErrorResponse('Document not found or insufficient permissions', 404));
+  }
+  
+  // Check if user already has access
+  const existingAccess = document.access.find(acc => acc.user.toString() === userId);
+  
+  if (existingAccess) {
+    // Update existing access
+    existingAccess.permission = permission;
+    existingAccess.grantedAt = new Date();
+  } else {
+    // Add new access
+    document.access.push({
+      user: userId,
+      permission,
+      grantedAt: new Date(),
+      grantedBy: req.user.id
+    });
+  }
+  
   document.updatedBy = req.user.id;
+  document.updatedAt = new Date();
   
   await document.save();
   
+  // Populate related fields for the response
+  await document
+    .populate('access.user', 'name email')
+    .populate('access.grantedBy', 'name email')
+    .execPopulate();
+  
   res.status(200).json({
     success: true,
     data: document
   });
 });
 
-// @desc    Update document
-// @route   PUT /api/v1/documents/:id
-// @access  Private
-exports.updateDocument = asyncHandler(async (req, res, next) => {
-  let document = await Document.findById(req.params.id);
-
-  if (!document) {
-    return next(
-      new ErrorResponse(`Document not found with id of ${req.params.id}`, 404)
-    );
+/**
+ * @desc    Remove user access to document
+ * @route   DELETE /api/v1/documents/:id/share/:userId
+ * @access  Private
+ */
+exports.removeDocumentAccess = asyncHandler(async (req, res, next) => {
+  const { userId } = req.params;
+  
+  // Cannot remove your own access
+  if (userId === req.user.id) {
+    return next(new ErrorResponse('Cannot remove your own access', 400));
   }
-
-  // Make sure user is document owner or has edit access
-  if (
-    document.createdBy.toString() !== req.user.id &&
-    !document.access.some(a => 
-      a.user.toString() === req.user.id && ['edit', 'manage'].includes(a.permission)
-    )
-  ) {
-    return next(
-      new ErrorResponse(
-        `User ${req.user.id} is not authorized to update this document`,
-        401
-      )
-    );
-  }
-
-  // Handle tags update if provided
-  if (req.body.tagIds) {
-    const tagIdsArray = Array.isArray(req.body.tagIds) 
-      ? req.body.tagIds 
-      : req.body.tagIds.split(',');
-    
-    // Verify all tags exist and belong to the user
-    const existingTags = await Tag.find({
-      _id: { $in: tagIdsArray },
-      createdBy: req.user.id
-    });
-    
-    if (existingTags.length !== tagIdsArray.length) {
-      return next(new ErrorResponse('One or more tags not found', 404));
-    }
-    
-    req.body.tags = tagIdsArray;
-    delete req.body.tagIds;
-  }
-
-  // Process file if uploaded
-  if (req.file) {
-    // Create a new version
-    const newVersion = {
-      versionNumber: document.versions.length + 1,
-      fileUrl: `/uploads/documents/${req.file.filename}`,
-      fileType: req.file.mimetype,
-      fileSize: req.file.size,
-      uploadedBy: req.user.id,
-      changes: req.body.changes || 'Document updated',
-      isCurrent: true
-    };
-    
-    // Mark all other versions as not current
-    document.versions.forEach(version => {
-      version.isCurrent = false;
-    });
-    
-    document.versions.push(newVersion);
-    document.currentVersion = newVersion.versionNumber;
-    
-    // Update document with new file info
-    req.body.fileUrl = newVersion.fileUrl;
-    req.body.fileType = newVersion.fileType;
-    req.body.fileSize = newVersion.fileSize;
-  }
-
-  // For non-file updates
-  req.body.updatedBy = req.user.id;
-  document = await Document.findByIdAndUpdate(
-    req.params.id, 
-    req.body, 
-    { new: true, runValidators: true }
-  ).populate('tags', 'name color');
-
-  res.status(200).json({
-    success: true,
-    data: document
+  
+  const document = await Document.findOne({
+    _id: req.params.id,
+    'access.user': req.user.id,
+    'access.permission': 'manage'
   });
-});
-
-// @desc    Delete document
-// @route   DELETE /api/v1/documents/:id
-// @access  Private
-exports.deleteDocument = asyncHandler(async (req, res, next) => {
-  const document = await Document.findById(req.params.id);
-
+  
   if (!document) {
-    return next(
-      new ErrorResponse(`Document not found with id of ${req.params.id}`, 404)
-    );
+    return next(new ErrorResponse('Document not found or insufficient permissions', 404));
   }
-
-  // Make sure user is document owner or has manage access
-  const userAccess = document.access.find(a => a.user.toString() === req.user.id);
-  if (document.createdBy.toString() !== req.user.id && 
-      (!userAccess || userAccess.permission !== 'manage')) {
-    return next(
-      new ErrorResponse(`User ${req.user.id} is not authorized to delete this document`, 401)
-    );
+  
+  // Cannot remove the last manager
+  const managerCount = document.access.filter(
+    acc => acc.permission === 'manage' && acc.user.toString() !== userId
+  ).length;
+  
+  if (managerCount === 0) {
+    return next(new ErrorResponse('Cannot remove the last manager. Please assign another manager first.', 400));
   }
-
-  // Delete the file from the filesystem
-  const filePath = path.join(__dirname, `../../public${document.fileUrl}`);
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-  }
-
-  await document.remove();
-
+  
+  // Remove the access
+  document.access = document.access.filter(acc => acc.user.toString() !== userId);
+  document.updatedBy = req.user.id;
+  document.updatedAt = new Date();
+  
+  await document.save();
+  
   res.status(200).json({
     success: true,
     data: {}
   });
 });
 
-// @desc    Share a document with a user
-// @route   POST /api/v1/documents/:id/share
-// @access  Private
-exports.shareDocument = asyncHandler(async (req, res, next) => {
-  const { userId, permission } = req.body;
-
-  // Validate permission
-  if (!['view', 'edit', 'manage'].includes(permission)) {
-    return next(new ErrorResponse('Invalid permission level', 400));
-  }
-
-  // Check if document exists and user has manage access
-  let document = await Document.findById(req.params.id);
+/**
+ * @desc    Get document versions
+ * @route   GET /api/v1/documents/:id/versions
+ * @access  Private
+ */
+exports.getDocumentVersions = asyncHandler(async (req, res, next) => {
+  const document = await Document.findOne({
+    _id: req.params.id,
+    'access.user': req.user.id
+  }, 'versions');
+  
   if (!document) {
-    return next(new ErrorResponse(`Document not found with id of ${req.params.id}`, 404));
+    return next(new ErrorResponse('Document not found or insufficient permissions', 404));
   }
-
-  // Check if user has manage access
-  const hasManageAccess = document.access.some(
-    a => a.user.toString() === req.user.id && a.permission === 'manage'
+  
+  // Populate user information for each version
+  const versions = await Promise.all(
+    document.versions.map(async (version) => {
+      const populatedVersion = version.toObject();
+      const user = await User.findById(version.uploadedBy).select('name email');
+      return { ...populatedVersion, uploadedBy: user };
+    })
   );
   
-  if (document.createdBy.toString() !== req.user.id && !hasManageAccess) {
-    return next(
-      new ErrorResponse(
-        `User ${req.user.id} is not authorized to share this document`,
-        401
-      )
-    );
-  }
-
-  // Check if user exists
-  const user = await User.findById(userId);
-  if (!user) {
-    return next(new ErrorResponse(`User not found with id of ${userId}`, 404));
-  }
-
-  // Check if user already has access
-  const existingAccess = document.access.find(
-    a => a.user.toString() === userId
-  );
-
-  if (existingAccess) {
-    // Update existing permission
-    existingAccess.permission = permission;
-  } else {
-    // Add new access
-    document.access.push({
-      user: userId,
-      permission
-    });
-  }
-
-  await document.save();
-
-  // Populate user details in the response
-  await document.populate({
-    path: 'access.user',
-    select: 'name email'
-  });
-
   res.status(200).json({
     success: true,
-    data: document
+    count: versions.length,
+    data: versions.sort((a, b) => b.version - a.version)
   });
 });
 
-// @desc    Remove user access to a document
-// @route   DELETE /api/v1/documents/:id/share/:userId
-// @access  Private
-exports.removeDocumentAccess = asyncHandler(async (req, res, next) => {
-  const { id, userId } = req.params;
-
-  // Check if document exists and user has manage access
-  let document = await Document.findById(id);
-  if (!document) {
-    return next(new ErrorResponse(`Document not found with id of ${id}`, 404));
-  }
-
-  // Check if user has manage access
-  const hasManageAccess = document.access.some(
-    a => a.user.toString() === req.user.id && a.permission === 'manage'
-  );
+/**
+ * @desc    Restore document version
+ * @route   POST /api/v1/documents/:id/versions/restore
+ * @access  Private
+ */
+exports.restoreDocumentVersion = asyncHandler(async (req, res, next) => {
+  const { version } = req.body;
   
-  if (document.createdBy.toString() !== req.user.id && !hasManageAccess) {
-    return next(
-      new ErrorResponse(
-        `User ${req.user.id} is not authorized to modify access for this document`,
-        401
-      )
-    );
-  }
-
-  // Check if trying to remove owner's access
-  if (document.createdBy.toString() === userId) {
-    return next(
-      new ErrorResponse('Cannot remove access for the document owner', 400)
-    );
-  }
-
-  // Remove the access
-  document.access = document.access.filter(
-    a => a.user.toString() !== userId
-  );
-
-  await document.save();
-
-  // Populate user details in the response
-  await document.populate({
-    path: 'access.user',
-    select: 'name email'
+  const document = await Document.findOne({
+    _id: req.params.id,
+    'access.user': req.user.id,
+    'access.permission': { $in: ['edit', 'manage'] }
   });
-
-  res.status(200).json({
-    success: true,
-    data: document
-  });
-});
-
-// @desc    Download a document
-// @route   GET /api/v1/documents/:id/download
-// @access  Private
-exports.downloadDocument = asyncHandler(async (req, res, next) => {
+  
+  if (!document) {
+    return next(new ErrorResponse('Document not found or insufficient permissions', 404));
+  }
+  
+  const versionToRestore = document.versions.find(v => v.version === parseInt(version));
+  
+  if (!versionToRestore) {
+    return next(new ErrorResponse(`Version ${version} not found`, 404));
+  }
+  
   try {
-    const document = await Document.findById(req.params.id);
-
-    if (!document) {
-      return next(new ErrorResponse('Document not found', 404));
-    }
-
-    const hasAccess = document.createdBy._id.toString() === req.user.id || 
-                   document.access.some(a => a.user.toString() === req.user.id);
-  
-    if (!hasAccess) {
-      return next(
-        new ErrorResponse(`Not authorized to access this document`, 401)
-      );
-    }
-
-    const filePath = path.join(__dirname, `../../public${document.fileUrl}`);
+    // Create a new version with the restored content
+    document.versions.push({
+      version: document.versions.length + 1,
+      fileUrl: versionToRestore.fileUrl,
+      fileType: versionToRestore.fileType,
+      fileSize: versionToRestore.fileSize,
+      uploadedBy: req.user.id,
+      changes: `Restored version ${version}`,
+      uploadedAt: new Date()
+    });
     
-    if (!fs.existsSync(filePath)) {
-      return next(new ErrorResponse('File not found', 404));
-    }
-
-    res.download(filePath, document.name);
-  } catch (err) {
-    next(err);
+    // Update document with the restored version
+    document.fileUrl = versionToRestore.fileUrl;
+    document.fileType = versionToRestore.fileType;
+    document.fileSize = versionToRestore.fileSize;
+    document.updatedBy = req.user.id;
+    document.updatedAt = new Date();
+    
+    await document.save();
+    
+    res.status(200).json({
+      success: true,
+      data: document
+    });
+    
+  } catch (error) {
+    next(error);
   }
+});
+
+/**
+ * @desc    Download document
+ * @route   GET /api/v1/documents/:id/download
+ * @access  Private
+ */
+exports.downloadDocument = asyncHandler(async (req, res, next) => {
+  const document = await Document.findOne({
+    _id: req.params.id,
+    'access.user': req.user.id
+  });
+  
+  if (!document) {
+    return next(new ErrorResponse('Document not found or insufficient permissions', 404));
+  }
+  
+  const filePath = path.join(__dirname, '..', document.fileUrl);
+  
+  if (!fs.existsSync(filePath)) {
+    return next(new ErrorResponse('File not found', 404));
+  }
+  
+  // Set headers for file download
+  res.download(filePath, document.name, (err) => {
+    if (err) {
+      return next(new ErrorResponse('Error downloading file', 500));
+    }
+  });
 });

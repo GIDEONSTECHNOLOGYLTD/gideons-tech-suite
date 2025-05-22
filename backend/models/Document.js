@@ -35,20 +35,32 @@ const VersionSchema = new mongoose.Schema({
 const TagSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true,
+    required: [true, 'Please add a tag name'],
     trim: true,
+    maxlength: [50, 'Name can not be more than 50 characters'],
     lowercase: true
   },
   color: {
     type: String,
-    default: '#808080'
+    default: '#3f51b5',
+    match: [/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Please add a valid hex color']
   },
   createdBy: {
     type: mongoose.Schema.ObjectId,
     ref: 'User',
     required: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
   }
-}, { timestamps: true });
+}, {
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Ensure tag names are unique per user
+TagSchema.index({ name: 1, createdBy: 1 }, { unique: true });
 
 const DocumentSchema = new mongoose.Schema({
   name: {
