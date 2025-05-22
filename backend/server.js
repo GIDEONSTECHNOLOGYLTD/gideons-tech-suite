@@ -28,6 +28,7 @@ const tasks = require('./routes/tasks');
 const users = require('./routes/users');
 const documents = require('./routes/documents');
 const folders = require('./routes/folders');
+const search = require('./routes/search');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -83,6 +84,7 @@ app.use('/api/v1/tasks', tasks);
 app.use('/api/v1/users', users);
 app.use('/api/v1/documents', documents);
 app.use('/api/v1/folders', folders);
+app.use('/api/v1/search', search);
 
 // Basic route
 app.get('/api', (req, res) => {

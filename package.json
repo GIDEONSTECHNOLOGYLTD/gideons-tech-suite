@@ -1,7 +1,9 @@
 {
   "dependencies": {
     "date-fns": "^4.1.0",
+    "dotenv": "^16.5.0",
     "html-to-text": "^9.0.5",
+    "mongoose": "^8.15.0",
     "nodemailer": "^7.0.3",
     "pug": "^3.0.3"
   }
