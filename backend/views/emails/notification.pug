@@ -1,0 +1,22 @@
+extends base
+
+block content
+  h2= subject
+  
+  p Hello #{firstName},
+  
+  block notificationContent
+    p You have a new notification from Gideon's Tech Suite.
+  
+  if url
+    p(style="text-align: center; margin: 30px 0;")
+      a.btn.btn-primary(href=`${url}`) View Details
+    
+    p Or copy and paste this link into your browser:
+    p(style="word-break: break-all; color: #3498db;") #{url}
+  
+  p If you have any questions or need assistance, please don't hesitate to contact our support team.
+  
+  p Best regards,
+  br
+  | The Gideon's Tech Suite Team

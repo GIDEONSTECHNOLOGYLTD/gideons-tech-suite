@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "html-to-text": "^9.0.5",
+    "nodemailer": "^7.0.3",
+    "pug": "^3.0.3"
+  }
+}

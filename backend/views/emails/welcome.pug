@@ -1,0 +1,21 @@
+extends base
+
+block content
+  h2 Welcome to Gideon's Tech Suite, #{firstName}!
+  
+  p We're excited to have you on board. Your account has been successfully created and you can now access all the features of our platform.
+  
+  p To get started, please click the button below to verify your email address and set up your account:
+  
+  p(style="text-align: center; margin: 30px 0;")
+    a.btn.btn-primary(href=`${url}`) Verify Email Address
+  
+  p If the button doesn't work, you can copy and paste this link into your browser:
+  
+  p(style="word-break: break-all; color: #3498db;") #{url}
+  
+  p If you didn't create an account with us, please ignore this email or contact our support team if you have any questions.
+  
+  p Best regards,
+  br
+  | The Gideon's Tech Suite Team
