@@ -113,8 +113,11 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Mount routers
-app.use('/api/v1/health', health); // Health check endpoint
+// Health check endpoint at the root level
+app.use('/health', health);
+app.use('/api/health', health);
+
+// API v1 routes
 app.use('/api/v1/auth', auth);
 app.use('/api/v1/projects', projects);
 app.use('/api/v1/tasks', tasks);
