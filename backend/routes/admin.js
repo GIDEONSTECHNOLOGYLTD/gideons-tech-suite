@@ -9,36 +9,28 @@ const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Log admin route access
+router.use((req, res, next) => {
+  console.log(`[Admin Route] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
 // All routes below are protected and require admin role
 router.use(protect);
+router.use((req, res, next) => {
+  console.log('User attempting admin access:', {
+    userId: req.user?._id,
+    role: req.user?.role,
+    email: req.user?.email
+  });
+  next();
+});
 router.use(authorize('admin'));
 
-/**
- * @route   GET /api/v1/admin/users
- * @desc    Get all users (admin only)
- * @access  Private/Admin
- */
+// Admin routes
 router.get('/users', getUsers);
-
-/**
- * @route   GET /api/v1/admin/users/:id
- * @desc    Get user by ID (admin only)
- * @access  Private/Admin
- */
 router.get('/users/:id', getUser);
-
-/**
- * @route   POST /api/v1/admin/make-admin
- * @desc    Make a user admin by email
- * @access  Private/Admin
- */
 router.post('/make-admin', makeUserAdmin);
-
-/**
- * @route   DELETE /api/v1/admin/users/:id
- * @desc    Delete user (admin only)
- * @access  Private/Admin
- */
 router.delete('/users/:id', deleteUser);
 
 module.exports = router;

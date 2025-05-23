@@ -7,7 +7,8 @@
     "postinstall": "cd backend && npm install",
     "build": "cd backend && npm install",
     "install:backend": "cd backend && npm install",
-    "install:frontend": "cd frontend && npm install"
+    "install:frontend": "cd frontend && npm install",
+    "admin:create": "node scripts/createAdmin.js"
   },
   "dependencies": {
     "date-fns": "^4.1.0",

@@ -16,20 +16,32 @@ const sendEmail = async ({ email, subject, message }) => {
 exports.register = asyncHandler(async (req, res, next) => {
   const { name, email, password, role } = req.body;
 
-  // Prevent admin registration through this route
-  if (role && role === 'admin') {
-    return next(new ErrorResponse('Not authorized to register as admin', 403));
+  // Prevent any role assignment during registration
+  if (role) {
+    return next(new ErrorResponse('Role assignment is not allowed during registration', 403));
   }
 
-  // Create user as regular user
-  const user = await User.create({
-    name,
-    email,
-    password,
-    role: 'user' // Force role to be 'user' regardless of input
-  });
+  try {
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return next(new ErrorResponse('User already exists with this email', 400));
+    }
 
-  sendTokenResponse(user, 200, res);
+    // Create user as regular user
+    const user = await User.create({
+      name,
+      email,
+      password,
+      role: 'user' // Force role to be 'user'
+    });
+
+    console.log(`New user registered: ${user.email} (ID: ${user._id})`);
+    sendTokenResponse(user, 200, res);
+  } catch (error) {
+    console.error('Registration error:', error);
+    next(new ErrorResponse('Registration failed', 500));
+  }
 });
 
 // @desc    Login user
