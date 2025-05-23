@@ -3,11 +3,20 @@ const ErrorResponse = require('../utils/errorResponse');
 const Task = require('../models/Task');
 const Document = require('../models/Document');
 const Project = require('../models/Project');
+const mongoose = require('mongoose');
 
 // @desc    Get dashboard statistics
 // @route   GET /api/v1/dashboard/stats
 // @access  Private
 exports.getDashboardStats = asyncHandler(async (req, res, next) => {
+  console.log('Database connection state:', mongoose.connection.readyState);
+  console.log('User ID from request:', req.user);
+  
+  if (!req.user || !req.user.id) {
+    console.error('No user ID found in request');
+    return next(new ErrorResponse('Not authorized to access this route', 401));
+  }
+  
   const userId = req.user.id;
   
   // Get task statistics

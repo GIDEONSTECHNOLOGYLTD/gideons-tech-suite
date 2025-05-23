@@ -66,7 +66,6 @@ app.use(
 // Enable CORS with multiple allowed origins
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://gideons-tech-frontend.vercel.app',
   'https://frontend-t73t.onrender.com'
 ];
 
@@ -130,25 +129,37 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Health check endpoint at the root level
+// Create a router for API v1
+const apiV1Router = express.Router();
+
+// Mount all v1 routes
+apiV1Router.use('/auth', auth);
+apiV1Router.use('/projects', projects);
+apiV1Router.use('/tasks', tasks);
+apiV1Router.use('/users', users);
+apiV1Router.use('/documents', documents);
+apiV1Router.use('/folders', folders);
+apiV1Router.use('/search', search);
+apiV1Router.use('/dashboard', dashboard);
+apiV1Router.use('/admin', admin);
+
+// Mount the API v1 router at /api/v1
+app.use('/api/v1', apiV1Router);
+
+// Health check endpoints
 app.use('/health', health);
 app.use('/api/health', health);
+app.use('/api/v1/health', health);
 
-// API v1 routes
-app.use('/api/v1/auth', auth);
-app.use('/api/v1/projects', projects);
-app.use('/api/v1/tasks', tasks);
-app.use('/api/v1/users', users);
-app.use('/api/v1/documents', documents);
-app.use('/api/v1/folders', folders);
-app.use('/api/v1/search', search);
-app.use('/api/v1/dashboard', dashboard);
-
-// WARNING: This is a temporary admin route - REMOVE AFTER USE
-app.use('/api/v1/admin', admin);
-
-// 404 handler for API routes
-app.use('/api', notFound);
+// Handle 404 for /api routes
+app.use('/api', (req, res, next) => {
+  res.status(404).json({
+    success: false,
+    error: 'API endpoint not found',
+    message: 'The requested API endpoint does not exist.',
+    path: req.originalUrl
+  });
+});
 
 // Basic route
 app.get('/api', (req, res) => {

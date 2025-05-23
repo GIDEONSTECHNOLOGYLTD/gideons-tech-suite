@@ -16,12 +16,17 @@ const sendEmail = async ({ email, subject, message }) => {
 exports.register = asyncHandler(async (req, res, next) => {
   const { name, email, password, role } = req.body;
 
-  // Create user
+  // Prevent admin registration through this route
+  if (role && role === 'admin') {
+    return next(new ErrorResponse('Not authorized to register as admin', 403));
+  }
+
+  // Create user as regular user
   const user = await User.create({
     name,
     email,
     password,
-    role
+    role: 'user' // Force role to be 'user' regardless of input
   });
 
   sendTokenResponse(user, 200, res);

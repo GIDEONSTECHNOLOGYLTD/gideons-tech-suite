@@ -25,13 +25,37 @@ exports.protect = async (req, res, next) => {
   }
 
   try {
+    // Check if JWT_SECRET is set
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not set in environment variables');
+      return next(new ErrorResponse('Server configuration error', 500));
+    }
+    
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    if (!decoded || !decoded.id) {
+      console.error('Invalid token payload:', decoded);
+      return next(new ErrorResponse('Invalid token', 401));
+    }
 
-    req.user = await User.findById(decoded.id);
+    const user = await User.findById(decoded.id);
+    
+    if (!user) {
+      console.error('User not found for ID:', decoded.id);
+      return next(new ErrorResponse('User not found', 404));
+    }
+    
+    req.user = user;
     next();
   } catch (err) {
-    return next(new ErrorResponse('Not authorized to access this route', 401));
+    console.error('Authentication error:', err.message);
+    if (err.name === 'JsonWebTokenError') {
+      return next(new ErrorResponse('Invalid token', 401));
+    } else if (err.name === 'TokenExpiredError') {
+      return next(new ErrorResponse('Token expired', 401));
+    }
+    return next(new ErrorResponse('Authentication failed', 401));
   }
 };
 

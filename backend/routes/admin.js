@@ -1,22 +1,44 @@
 const express = require('express');
 const { 
   makeUserAdmin,
-  removeAdminRoute
+  getUsers,
+  getUser,
+  deleteUser
 } = require('../controllers/adminController');
+const { protect, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-// WARNING: These routes are temporary and should be removed after use
-// They are only for initial admin setup
+// All routes below are protected and require admin role
+router.use(protect);
+router.use(authorize('admin'));
 
-// @route   POST /api/v1/admin/make-admin
-// @desc    Make a user admin by email
-// @access  Public (temporary)
+/**
+ * @route   GET /api/v1/admin/users
+ * @desc    Get all users (admin only)
+ * @access  Private/Admin
+ */
+router.get('/users', getUsers);
+
+/**
+ * @route   GET /api/v1/admin/users/:id
+ * @desc    Get user by ID (admin only)
+ * @access  Private/Admin
+ */
+router.get('/users/:id', getUser);
+
+/**
+ * @route   POST /api/v1/admin/make-admin
+ * @desc    Make a user admin by email
+ * @access  Private/Admin
+ */
 router.post('/make-admin', makeUserAdmin);
 
-// @route   DELETE /api/v1/admin/remove-admin-route
-// @desc    Reminder to remove admin routes after use
-// @access  Public (temporary)
-router.delete('/remove-admin-route', removeAdminRoute);
+/**
+ * @route   DELETE /api/v1/admin/users/:id
+ * @desc    Delete user (admin only)
+ * @access  Private/Admin
+ */
+router.delete('/users/:id', deleteUser);
 
 module.exports = router;
