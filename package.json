@@ -1,4 +1,12 @@
 {
+  "name": "gideons-tech-suite-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "cd backend && node server.js",
+    "install:backend": "cd backend && npm install",
+    "install:frontend": "cd frontend && npm install"
+  },
   "dependencies": {
     "date-fns": "^4.1.0",
     "dotenv": "^16.5.0",
@@ -6,5 +14,8 @@
     "mongoose": "^8.15.0",
     "nodemailer": "^7.0.3",
     "pug": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
