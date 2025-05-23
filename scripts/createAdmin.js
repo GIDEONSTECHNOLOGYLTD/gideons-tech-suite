@@ -51,9 +51,7 @@ const connectDB = async () => {
     console.log(`🔗 Connecting to MongoDB: ${mongoUri.split('@').pop()}`);
     await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
-      useUnifiedTopology: true,
-      useCreateIndex: true,
-      useFindAndModify: false
+      useUnifiedTopology: true
     });
     console.log('✅ MongoDB Connected'.green);
     return true;
