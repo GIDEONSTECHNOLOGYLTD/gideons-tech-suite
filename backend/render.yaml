@@ -1,0 +1,48 @@
+# Render Configuration
+# Documentation: https://render.com/docs/deploy-node-express-app
+
+services:
+  - type: web
+    name: gideons-tech-backend
+    env: node
+    region: oregon  # Options: oregon, ohio, frankfurt, singapore, sydney
+    plan: free  # free or starter
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000  # Render will set this automatically
+      - key: MONGODB_URI
+        sync: false  # Will be set manually in Render dashboard
+      - key: JWT_SECRET
+        sync: false  # Will be set manually in Render dashboard
+      - key: JWT_EXPIRE
+        value: 30d
+      - key: JWT_COOKIE_EXPIRE
+        value: "30"
+      - key: MAX_FILE_UPLOAD
+        value: "5242880"  # 5MB in bytes
+      - key: FRONTEND_URL
+        value: https://gideons-tech-frontend.vercel.app
+      - key: WEBSOCKET_PATH
+        value: /ws
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+# Uncomment and configure if you need a database
+# databases:
+#   - name: mydb
+#     databaseName: mydb
+#     user: myuser
+#     plan: free  # free, hobby, or other plans
+
+# Uncomment to add environment variables that sync with .env
+# envVars:
+#   - env: production
+#     from:
+#       path: ./config/config.prod.env
+#       property: MONGODB_URI
+#     to:
+#       key: MONGODB_URI
