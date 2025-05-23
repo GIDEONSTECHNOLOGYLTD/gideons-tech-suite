@@ -14,6 +14,7 @@ const cookieParser = require('cookie-parser');
 const fileupload = require('express-fileupload');
 const errorHandler = require('./middleware/error');
 const connectDB = require('./config/db');
+const setupWebSocket = require('./websocket/server');
 
 // Load env vars
 dotenv.config({ path: './config/config.env' });
@@ -120,8 +121,17 @@ app.use(errorHandler);
 
 const server = app.listen(
   PORT,
-  console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`.yellow.bold)
+  console.log(
+    `Server running in ${process.env.NODE_ENV} mode on port ${PORT}`.yellow.bold
+  )
 );
+
+// Set up WebSocket server
+const { broadcast, sendToUser } = setupWebSocket(server);
+
+// Make WebSocket utilities available in the app
+app.set('broadcast', broadcast);
+app.set('sendToUser', sendToUser);
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {
