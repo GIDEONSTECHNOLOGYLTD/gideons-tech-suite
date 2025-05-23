@@ -7,8 +7,8 @@ services:
     env: node
     region: oregon  # Options: oregon, ohio, frankfurt, singapore, sydney
     plan: free  # free or starter
-    buildCommand: npm install
-    # startCommand is defined in Procfile
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
