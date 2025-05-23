@@ -64,38 +64,57 @@ app.use(
 );
 
 // Enable CORS with multiple allowed origins
+// List of allowed origins
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5000',
+  'http://localhost:3001',
   'https://frontend-t73t.onrender.com',
-  'https://gideons-tech-suite.onrender.com'
+  'https://gideons-tech-suite.onrender.com',
+  'https://gideons-tech-suite-frontend.onrender.com',
+  'https://gideons-tech-suite.vercel.app'
 ];
+
+// Log allowed origins for debugging
+console.log('Allowed CORS origins:', allowedOrigins);
 
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      console.log('No origin in CORS check, allowing');
+      return callback(null, true);
+    }
+    
+    // Normalize the origin by removing trailing slashes and converting to lowercase
+    const normalizedOrigin = origin.replace(/\/+$/, '').toLowerCase();
     
     // Check if the origin is in the allowed list or is a subdomain of the allowed origins
-    const isAllowed = allowedOrigins.some(allowedOrigin => 
-      origin === allowedOrigin || 
-      origin.startsWith(allowedOrigin.replace('https://', 'http://')) ||
-      origin.startsWith(allowedOrigin.replace('http://', 'https://'))
-    );
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      const normalizedAllowed = allowedOrigin.replace(/\/+$/, '').toLowerCase();
+      return (
+        normalizedOrigin === normalizedAllowed ||
+        normalizedOrigin === `http://${normalizedAllowed.replace(/^https?:\/\//, '')}` ||
+        normalizedOrigin === `https://${normalizedAllowed.replace(/^https?:\/\//, '')}`
+      );
+    });
     
     if (isAllowed) {
+      console.log(`CORS allowed for origin: ${origin}`);
       return callback(null, true);
     } else {
       const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
       console.warn(msg);
+      console.warn('Allowed origins:', allowedOrigins);
       return callback(new Error(msg), false);
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-CSRF-Token', 'X-Requested-With', 'X-Requested-By', 'X-Requested-For'],
   exposedHeaders: ['Content-Range', 'X-Total-Count'],
-  optionsSuccessStatus: 200 // For legacy browser support
+  optionsSuccessStatus: 200, // For legacy browser support
+  preflightContinue: false
 };
 
 app.use(cors(corsOptions));
