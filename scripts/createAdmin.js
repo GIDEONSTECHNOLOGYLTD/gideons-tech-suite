@@ -13,33 +13,64 @@ dotenv.config({ path: path.join(__dirname, '../backend/config/config.env') });
 // Import User model
 const User = require(path.join(__dirname, '../backend/models/User'));
 
-// Configure readline for better input handling
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-// Helper function to ask questions
-const askQuestion = (question, hidden = false) => {
+// Simple prompt function without readline
+const prompt = (question, hidden = false) => {
   return new Promise((resolve) => {
-    if (hidden) {
-      const { stdin } = process;
-      const stdinHandler = (char) => {
-        if (char === '\n' || char === '\r' || char === '\u0004') {
-          process.stdin.pause();
-        } else {
-          process.stdout.write('*');
+    const { stdin } = process;
+    const isRaw = hidden && stdin.isTTY;
+    
+    if (isRaw) {
+      // Save current mode
+      const wasRaw = stdin.isRaw;
+      if (wasRaw) stdin.setRawMode(false);
+      
+      // Set up data handler
+      const onData = (data) => {
+        const byteArray = [...data];
+        if (byteArray.length > 0 && byteArray[0] === 3) {
+          // Handle Ctrl+C
+          console.log('^C');
+          process.exit();
         }
       };
-
-      process.stdin.on('data', stdinHandler);
-      rl.question(question, (answer) => {
-        process.stdin.off('data', stdinHandler);
+      
+      // Set up keypress handler
+      const onKeyPress = (str, key) => {
+        if (key.ctrl && key.name === 'c') {
+          console.log('^C');
+          process.exit();
+        }
+      };
+      
+      // Set up event listeners
+      stdin.on('data', onData);
+      if (process.stdin.isTTY) {
+        process.stdin.setRawMode(true);
+      }
+      
+      // Ask the question
+      process.stdout.write(question);
+      
+      // Handle the answer
+      const onDataAnswer = (data) => {
+        const answer = data.toString().trim();
+        // Clean up
+        process.stdin.off('data', onDataAnswer);
+        if (process.stdin.isTTY) {
+          process.stdin.setRawMode(false);
+        }
+        process.stdin.pause();
         console.log();
         resolve(answer);
-      });
+      };
+      
+      process.stdin.once('data', onDataAnswer);
     } else {
-      rl.question(question, (answer) => resolve(answer));
+      // Non-hidden input
+      process.stdout.write(question);
+      process.stdin.once('data', (data) => {
+        resolve(data.toString().trim());
+      });
     }
   });
 };
@@ -49,10 +80,10 @@ const connectDB = async () => {
   try {
     const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/gideons-tech-suite';
     console.log(`🔗 Connecting to MongoDB: ${mongoUri.split('@').pop()}`);
-    await mongoose.connect(mongoUri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true
-    });
+    
+    // Simple connection without deprecated options
+    await mongoose.connect(mongoUri);
+    
     console.log('✅ MongoDB Connected'.green);
     return true;
   } catch (err) {
@@ -73,31 +104,37 @@ const createAdmin = async () => {
     console.log('='.repeat(60).gray + '\n');
 
     // Get admin details
-    const name = await askQuestion('👤 Full Name: ');
+    console.log('👤 Full Name:');
+    const name = await prompt('> ');
     if (!name.trim()) {
       throw new Error('Name is required');
     }
 
-    const email = await askQuestion('📧 Email: ');
+    console.log('\n📧 Email:');
+    const email = await prompt('> ');
     if (!validateEmail(email)) {
       throw new Error('Please enter a valid email address');
     }
 
     let password, confirmPassword;
     do {
-      password = await askQuestion('🔑 Password (min 8 characters): ', true);
+      console.log('\n🔑 Password (min 8 characters):');
+      password = await prompt('> ', true);
+      
       if (password.length < 8) {
         console.log('❌ Password must be at least 8 characters'.red);
         continue;
       }
       
-      confirmPassword = await askQuestion('🔐 Confirm Password: ', true);
+      console.log('\n🔐 Confirm Password:');
+      confirmPassword = await prompt('> ', true);
+      
       if (password !== confirmPassword) {
         console.log('❌ Passwords do not match'.red);
       }
     } while (password !== confirmPassword || password.length < 8);
 
-    // Check if user already exists
+    console.log('\n🔍 Checking if user exists...');
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
       if (existingUser.role === 'admin') {
@@ -112,6 +149,7 @@ const createAdmin = async () => {
     }
 
     // Create user
+    console.log('\n🔨 Creating admin user...');
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -133,13 +171,15 @@ const createAdmin = async () => {
     console.log('='.repeat(60).gray);
     console.log('\n🔒 ' + 'Please keep these credentials secure!'.red.bold);
     
+    // Clean up and exit
+    await mongoose.connection.close();
     process.exit(0);
   } catch (error) {
     console.error('\n❌ ' + `Error: ${error.message}`.red);
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.close();
+    }
     process.exit(1);
-  } finally {
-    rl.close();
-    await mongoose.connection.close();
   }
 };
 
@@ -157,6 +197,9 @@ const main = async () => {
     await createAdmin();
   } catch (error) {
     console.error('\n❌ ' + `Fatal error: ${error.message}`.red);
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.close();
+    }
     process.exit(1);
   }
 };
