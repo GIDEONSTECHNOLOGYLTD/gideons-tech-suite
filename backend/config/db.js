@@ -4,13 +4,15 @@ const colors = require('colors');
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      useCreateIndex: true,
-      useFindAndModify: false,
       serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
       socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-      family: 4 // Use IPv4, skip trying IPv6
+      family: 4, // Use IPv4, skip trying IPv6
+      maxPoolSize: 10, // Maximum number of connections in the connection pool
+      serverApi: {
+        version: '1',
+        strict: true,
+        deprecationErrors: true,
+      }
     });
 
     console.log(`MongoDB Connected: ${conn.connection.host}`.cyan.underline.bold);
