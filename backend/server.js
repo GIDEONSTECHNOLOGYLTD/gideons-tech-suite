@@ -207,7 +207,8 @@ if (process.env.NODE_ENV === 'production') {
           '/api/v1/tasks',
           '/api/v1/users',
           '/api/v1/documents',
-          '/api/v1/folders'
+          '/api/v1/folders',
+          '/api/v1/admin'
         ]
       });
     });
