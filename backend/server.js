@@ -66,6 +66,8 @@ app.use(
 // Enable CORS with multiple allowed origins
 const allowedOrigins = [
   'http://localhost:3000',
+  'https://gideons-tech-frontend.vercel.app',
+  'https://gideons-tech-suite.onrender.com',
   'https://frontend-t73t.onrender.com'
 ];
 
@@ -74,17 +76,32 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+    // Check if the origin is in the allowed list or is a subdomain of the allowed origins
+    const isAllowed = allowedOrigins.some(allowedOrigin => 
+      origin === allowedOrigin || 
+      origin.startsWith(allowedOrigin.replace('https://', 'http://')) ||
+      origin.startsWith(allowedOrigin.replace('http://', 'https://'))
+    );
+    
+    if (isAllowed) {
+      return callback(null, true);
+    } else {
+      const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+      console.warn(msg);
       return callback(new Error(msg), false);
     }
-    return callback(null, true);
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Range', 'X-Total-Count'],
   optionsSuccessStatus: 200 // For legacy browser support
 };
 
 app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Trust proxy (important for rate limiting and secure cookies in production)
 if (process.env.NODE_ENV === 'production') {
@@ -129,39 +146,7 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Create a router for API v1
-const apiV1Router = express.Router();
-
-// Mount all v1 routes
-apiV1Router.use('/auth', auth);
-apiV1Router.use('/projects', projects);
-apiV1Router.use('/tasks', tasks);
-apiV1Router.use('/users', users);
-apiV1Router.use('/documents', documents);
-apiV1Router.use('/folders', folders);
-apiV1Router.use('/search', search);
-apiV1Router.use('/dashboard', dashboard);
-apiV1Router.use('/admin', admin);
-
-// Mount the API v1 router at /api/v1
-app.use('/api/v1', apiV1Router);
-
-// Health check endpoints
-app.use('/health', health);
-app.use('/api/health', health);
-app.use('/api/v1/health', health);
-
-// Handle 404 for /api routes
-app.use('/api', (req, res, next) => {
-  res.status(404).json({
-    success: false,
-    error: 'API endpoint not found',
-    message: 'The requested API endpoint does not exist.',
-    path: req.originalUrl
-  });
-});
-
-// Basic route
+// API welcome route
 app.get('/api', (req, res) => {
   res.status(200).json({ 
     success: true,
@@ -175,10 +160,33 @@ app.get('/api', (req, res) => {
       '/api/v1/tasks',
       '/api/v1/users',
       '/api/v1/documents',
-      '/api/v1/folders'
+      '/api/v1/folders',
+      '/api/v1/health'
     ]
   });
 });
+
+// Create and mount the API v1 router
+const apiV1Router = express.Router();
+
+// Mount all v1 routes
+apiV1Router.use('/auth', auth);
+apiV1Router.use('/projects', projects);
+apiV1Router.use('/tasks', tasks);
+apiV1Router.use('/users', users);
+apiV1Router.use('/documents', documents);
+apiV1Router.use('/folders', folders);
+apiV1Router.use('/search', search);
+apiV1Router.use('/dashboard', dashboard);
+apiV1Router.use('/admin', admin);
+apiV1Router.use('/health', health);
+
+// Mount the v1 router
+app.use('/api/v1', apiV1Router);
+
+// Health check endpoints (legacy)
+app.use('/health', health);
+app.use('/api/health', health);
 
 // Serve static assets in production if frontend build exists
 if (process.env.NODE_ENV === 'production') {
