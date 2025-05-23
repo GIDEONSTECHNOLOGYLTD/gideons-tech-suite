@@ -145,14 +145,49 @@ app.get('/api', (req, res) => {
   });
 });
 
-// Serve static assets in production
+// Serve static assets in production if frontend build exists
 if (process.env.NODE_ENV === 'production') {
-  // Set static folder
-  app.use(express.static(path.join(__dirname, '../frontend/build')));
-
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../frontend', 'build', 'index.html'));
-  });
+  const frontendBuildPath = path.join(__dirname, '../frontend/build');
+  const indexHtmlPath = path.join(frontendBuildPath, 'index.html');
+  
+  // Only serve frontend if build directory exists
+  if (require('fs').existsSync(frontendBuildPath)) {
+    console.log('Serving frontend build from:', frontendBuildPath);
+    app.use(express.static(frontendBuildPath));
+    
+    // Handle SPA routing - return index.html for all other routes
+    app.get('*', (req, res) => {
+      if (require('fs').existsSync(indexHtmlPath)) {
+        res.sendFile(indexHtmlPath);
+      } else {
+        res.status(404).json({
+          success: false,
+          error: 'Frontend build not found',
+          message: 'The frontend application is not available at this time.'
+        });
+      }
+    });
+  } else {
+    console.log('Frontend build not found. Only serving API endpoints.');
+    
+    // Handle root route
+    app.get('/', (req, res) => {
+      res.status(200).json({
+        success: true,
+        message: 'Gideon\'s Tech Suite API is running',
+        documentation: 'https://docs.gideonstechsuite.com',
+        endpoints: [
+          '/api/v1/health',
+          '/api/v1/auth',
+          '/api/v1/projects',
+          '/api/v1/tasks',
+          '/api/v1/users',
+          '/api/v1/documents',
+          '/api/v1/folders'
+        ]
+      });
+    });
+  }
 }
 
 // Error handler middleware (must be after the controllers)
