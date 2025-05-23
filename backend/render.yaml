@@ -9,6 +9,9 @@ services:
     plan: free  # free or starter
     buildCommand: npm install
     startCommand: npm start
+    buildpacks:
+      - type: node
+        version: 18.x  # Explicitly set Node.js version
     envVars:
       - key: NODE_ENV
         value: production
