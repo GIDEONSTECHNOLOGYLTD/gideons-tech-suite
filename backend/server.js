@@ -66,9 +66,9 @@ app.use(
 // Enable CORS with multiple allowed origins
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://gideons-tech-frontend.vercel.app',
-  'https://gideons-tech-suite.onrender.com',
-  'https://frontend-t73t.onrender.com'
+  'http://localhost:5000',
+  'https://frontend-t73t.onrender.com',
+  'https://gideons-tech-suite.onrender.com'
 ];
 
 const corsOptions = {

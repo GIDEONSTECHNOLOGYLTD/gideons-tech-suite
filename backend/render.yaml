@@ -4,7 +4,7 @@
 services:
   - type: web
     name: gideons-tech-backend
-    env: node
+    runtime: node
     region: oregon  # Options: oregon, ohio, frankfurt, singapore, sydney
     plan: free  # free or starter
     buildCommand: npm install && npm run build
