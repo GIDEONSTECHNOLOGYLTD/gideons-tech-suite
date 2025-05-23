@@ -1,41 +1,114 @@
+#!/usr/bin/env node
+
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const User = require('../backend/models/User');
+const readline = require('readline');
+const path = require('path');
 const dotenv = require('dotenv');
+require('colors');
 
 // Load environment variables
-dotenv.config({ path: './backend/config/config.env' });
+dotenv.config({ path: path.join(__dirname, '../backend/config/config.env') });
+
+// Import User model
+const User = require(path.join(__dirname, '../backend/models/User'));
+
+// Configure readline for better input handling
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+// Helper function to ask questions
+const askQuestion = (question, hidden = false) => {
+  return new Promise((resolve) => {
+    if (hidden) {
+      const { stdin } = process;
+      const stdinHandler = (char) => {
+        if (char === '\n' || char === '\r' || char === '\u0004') {
+          process.stdin.pause();
+        } else {
+          process.stdout.write('*');
+        }
+      };
+
+      process.stdin.on('data', stdinHandler);
+      rl.question(question, (answer) => {
+        process.stdin.off('data', stdinHandler);
+        console.log();
+        resolve(answer);
+      });
+    } else {
+      rl.question(question, (answer) => resolve(answer));
+    }
+  });
+};
 
 // Connect to DB
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => console.log('MongoDB Connected'))
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
-  });
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      useCreateIndex: true,
+      useFindAndModify: false
+    });
+    console.log('✅ MongoDB Connected'.green);
+    return true;
+  } catch (err) {
+    console.error('❌ MongoDB connection error:'.red, err.message);
+    return false;
+  }
+};
+
+const validateEmail = (email) => {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(String(email).toLowerCase());
+};
 
 const createAdmin = async () => {
   try {
-    const readline = require('readline').createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
+    console.clear();
+    console.log('🚀 '.blue + 'Gideon\'s Technology - Admin User Setup'.bold);
+    console.log('='.repeat(60).gray + '\n');
 
-    const askQuestion = (question) => new Promise(resolve => readline.question(question, resolve));
+    // Get admin details
+    const name = await askQuestion('👤 Full Name: ');
+    if (!name.trim()) {
+      throw new Error('Name is required');
+    }
 
-    console.log('=== Create Admin User ===');
-    
-    const name = await askQuestion('Name: ');
-    const email = await askInput('Email: ');
-    const password = await askPassword('Password (min 8 characters): ');
+    const email = await askQuestion('📧 Email: ');
+    if (!validateEmail(email)) {
+      throw new Error('Please enter a valid email address');
+    }
+
+    let password, confirmPassword;
+    do {
+      password = await askQuestion('🔑 Password (min 8 characters): ', true);
+      if (password.length < 8) {
+        console.log('❌ Password must be at least 8 characters'.red);
+        continue;
+      }
+      
+      confirmPassword = await askQuestion('🔐 Confirm Password: ', true);
+      if (password !== confirmPassword) {
+        console.log('❌ Passwords do not match'.red);
+      }
+    } while (password !== confirmPassword || password.length < 8);
 
     // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
-      console.error('Error: User with this email already exists');
-      process.exit(1);
+      if (existingUser.role === 'admin') {
+        console.log('\n⚠️ '.yellow + 'Admin user already exists with this email'.bold);
+        console.log(`Name: ${existingUser.name}`);
+        console.log(`Role: ${existingUser.role}`);
+        console.log(`Created: ${existingUser.createdAt}`);
+        process.exit(0);
+      } else {
+        throw new Error('A regular user with this email already exists');
+      }
     }
 
     // Create user
@@ -44,71 +117,54 @@ const createAdmin = async () => {
 
     const user = await User.create({
       name,
-      email,
+      email: email.toLowerCase(),
       password: hashedPassword,
       role: 'admin',
-      isActive: true
+      isActive: true,
+      isVerified: true
     });
 
-    console.log('\n✅ Admin user created successfully!');
-    console.log(`Name: ${user.name}`);
-    console.log(`Email: ${user.email}`);
-    console.log('Role: admin');
+    console.log('\n✅ ' + 'Admin user created successfully!'.green.bold);
+    console.log('='.repeat(60).gray);
+    console.log(`👤 Name: ${user.name}`);
+    console.log(`📧 Email: ${user.email}`);
+    console.log(`🔑 Role: ${user.role}`);
+    console.log(`🆔 User ID: ${user._id}`);
+    console.log('='.repeat(60).gray);
+    console.log('\n🔒 ' + 'Please keep these credentials secure!'.red.bold);
     
     process.exit(0);
   } catch (error) {
-    console.error('Error creating admin user:', error);
+    console.error('\n❌ ' + `Error: ${error.message}`.red);
+    process.exit(1);
+  } finally {
+    rl.close();
+    await mongoose.connection.close();
+  }
+};
+
+// Main function
+const main = async () => {
+  try {
+    console.log('\n🔌 Connecting to database...'.blue);
+    const connected = await connectDB();
+    
+    if (!connected) {
+      console.error('❌ Failed to connect to database. Please check your connection and try again.'.red);
+      process.exit(1);
+    }
+
+    await createAdmin();
+  } catch (error) {
+    console.error('\n❌ ' + `Fatal error: ${error.message}`.red);
     process.exit(1);
   }
 };
 
-// Helper function to hide password input
-const askPassword = (question) => {
-  const readline = require('readline');
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+// Run the application
+if (require.main === module) {
+  main();
+}
 
-  const { stdout } = process;
-  
-  return new Promise((resolve) => {
-    const inputHandler = (char) => {
-      switch (char) {
-        case '\n':
-        case '\r':
-        case '\u0004':
-          process.stdin.pause();
-          break;
-        default:
-          stdout.write('*');
-          break;
-      }
-    };
-
-    process.stdin.on('data', inputHandler);
-
-    rl.question(question, (answer) => {
-      process.stdin.off('data', inputHandler);
-      rl.close();
-      console.log();
-      resolve(answer);
-    });
-  });
-};
-
-// Helper function for regular input
-const askInput = (question) => {
-  const readline = require('readline').createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-  
-  return new Promise(resolve => readline.question(question, answer => {
-    readline.close();
-    resolve(answer);
-  }));
-};
-
-// Run the function
-createAdmin();
+// Export for testing
+module.exports = { createAdmin, validateEmail };
