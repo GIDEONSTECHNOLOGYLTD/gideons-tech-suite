@@ -13,65 +13,70 @@ dotenv.config({ path: path.join(__dirname, '../backend/config/config.env') });
 // Import User model
 const User = require(path.join(__dirname, '../backend/models/User'));
 
-// Simple prompt function without readline
-const prompt = (question, hidden = false) => {
+// Simple synchronous prompt
+const prompt = (question) => {
+  const readline = require('readline').createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
   return new Promise((resolve) => {
-    const { stdin } = process;
-    const isRaw = hidden && stdin.isTTY;
-    
-    if (isRaw) {
-      // Save current mode
-      const wasRaw = stdin.isRaw;
-      if (wasRaw) stdin.setRawMode(false);
+    readline.question(question, (answer) => {
+      readline.close();
+      resolve(answer.trim());
+    });
+  });
+};
+
+// Simple synchronous password prompt
+const promptPassword = (question) => {
+  const readline = require('readline').createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  // For older Node.js versions
+  const fs = require('fs');
+  const stdin = process.openStdin();
+  
+  process.stdin.resume();
+  process.stdout.write(question);
+  
+  let password = '';
+  
+  // Disable echoing
+  if (process.stdin.setRawMode) {
+    process.stdin.setRawMode(true);
+  }
+  
+  return new Promise((resolve) => {
+    const onData = (data) => {
+      const char = data.toString();
       
-      // Set up data handler
-      const onData = (data) => {
-        const byteArray = [...data];
-        if (byteArray.length > 0 && byteArray[0] === 3) {
-          // Handle Ctrl+C
-          console.log('^C');
-          process.exit();
-        }
-      };
-      
-      // Set up keypress handler
-      const onKeyPress = (str, key) => {
-        if (key.ctrl && key.name === 'c') {
-          console.log('^C');
-          process.exit();
-        }
-      };
-      
-      // Set up event listeners
-      stdin.on('data', onData);
-      if (process.stdin.isTTY) {
-        process.stdin.setRawMode(true);
+      // Handle Enter key
+      if (char === '\n' || char === '\r' || char === '\u0004') {
+        process.stdin.pause();
+        process.stdin.removeListener('data', onData);
+        console.log();
+        resolve(password);
+        return;
       }
       
-      // Ask the question
-      process.stdout.write(question);
-      
-      // Handle the answer
-      const onDataAnswer = (data) => {
-        const answer = data.toString().trim();
-        // Clean up
-        process.stdin.off('data', onDataAnswer);
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(false);
+      // Handle backspace
+      if (char === '\b' || char === '\x7f') {
+        if (password.length > 0) {
+          process.stdout.write('\b \b');
+          password = password.slice(0, -1);
         }
-        process.stdin.pause();
-        console.log();
-        resolve(answer);
-      };
+        return;
+      }
       
-      process.stdin.once('data', onDataAnswer);
-    } else {
-      // Non-hidden input
-      process.stdout.write(question);
-      process.stdin.once('data', (data) => {
-        resolve(data.toString().trim());
-      });
-    }
+      // Add character to password
+      password += char;
+      process.stdout.write('*');
+    };
+    
+    process.stdin.on('data', onData);
   });
 };
 
@@ -104,30 +109,28 @@ const createAdmin = async () => {
     console.log('='.repeat(60).gray + '\n');
 
     // Get admin details
-    console.log('👤 Full Name:');
-    const name = await prompt('> ');
+    const name = await prompt('👤 Full Name: ');
     if (!name.trim()) {
       throw new Error('Name is required');
     }
 
-    console.log('\n📧 Email:');
-    const email = await prompt('> ');
+    const email = await prompt('📧 Email: ');
     if (!validateEmail(email)) {
       throw new Error('Please enter a valid email address');
     }
 
     let password, confirmPassword;
     do {
-      console.log('\n🔑 Password (min 8 characters):');
-      password = await prompt('> ', true);
+      console.log('\n🔑 Enter a password (min 8 characters):');
+      password = await promptPassword('> ');
       
       if (password.length < 8) {
         console.log('❌ Password must be at least 8 characters'.red);
         continue;
       }
       
-      console.log('\n🔐 Confirm Password:');
-      confirmPassword = await prompt('> ', true);
+      console.log('\n🔐 Confirm password:');
+      confirmPassword = await promptPassword('> ');
       
       if (password !== confirmPassword) {
         console.log('❌ Passwords do not match'.red);
