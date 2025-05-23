@@ -37,6 +37,7 @@ const users = require('./routes/users');
 const documents = require('./routes/documents');
 const folders = require('./routes/folders');
 const search = require('./routes/search');
+const health = require('./routes/health');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -113,6 +114,7 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Mount routers
+app.use('/api/v1/health', health); // Health check endpoint
 app.use('/api/v1/auth', auth);
 app.use('/api/v1/projects', projects);
 app.use('/api/v1/tasks', tasks);
