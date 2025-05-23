@@ -37,7 +37,7 @@ exports.getDashboardStats = asyncHandler(async (req, res, next) => {
 
     const completedTasks = await Task.countDocuments({
       $and: [
-        { status: 'completed' },
+        { status: 'Done' }, // Changed from 'completed' to 'Done' to match the Task model enum
         {
           $or: [
             { assignedTo: userId },
@@ -49,17 +49,15 @@ exports.getDashboardStats = asyncHandler(async (req, res, next) => {
     
     // Get document statistics
     const totalDocuments = await Document.countDocuments({
-      $or: [
-        { owner: userId },
-        { 'collaborators.user': userId }
-      ]
+      'access.user': userId,
+      'access.permission': { $in: ['view', 'edit', 'manage'] }
     });
     
     // Get project statistics
     const totalProjects = await Project.countDocuments({
       $or: [
-        { owner: userId },
-        { 'team.user': userId }
+        { createdBy: userId },
+        { team: userId }
       ]
     });
     
@@ -88,6 +86,7 @@ exports.getDashboardStats = asyncHandler(async (req, res, next) => {
     
   } catch (error) {
     console.error('Error in getDashboardStats:', error);
-    return next(new ErrorResponse('Error fetching dashboard statistics', 500));
+    // Include the error message in the response for debugging
+    return next(new ErrorResponse(`Error fetching dashboard statistics: ${error.message}`, 500));
   }
 });
