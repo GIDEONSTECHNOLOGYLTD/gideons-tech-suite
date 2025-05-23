@@ -83,16 +83,59 @@ const promptPassword = (question) => {
 // Connect to DB
 const connectDB = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/gideons-tech-suite';
-    console.log(`🔗 Connecting to MongoDB: ${mongoUri.split('@').pop()}`);
+    // Use direct connection to local MongoDB
+    const mongoUri = 'mongodb://127.0.0.1:27017/gideons-tech-suite';
+    console.log('🔗 Connecting to MongoDB...'.blue);
     
-    // Simple connection without deprecated options
-    await mongoose.connect(mongoUri);
+    // Clear mongoose models to prevent OverwriteModelError
+    mongoose.models = {};
+    mongoose.modelSchemas = {};
     
-    console.log('✅ MongoDB Connected'.green);
+    // Connection options
+    const options = {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000, // 5 seconds timeout
+      socketTimeoutMS: 30000, // 30 seconds socket timeout
+      connectTimeoutMS: 10000, // 10 seconds connection timeout
+    };
+    
+    // Create connection
+    await mongoose.connect(mongoUri, options);
+    
+    // Get the connection instance
+    const db = mongoose.connection;
+    
+    // Handle connection events
+    db.on('error', (err) => {
+      console.error('❌ MongoDB connection error:'.red, err.message);
+      process.exit(1);
+    });
+    
+    // Wait for connection to be established
+    await new Promise((resolve, reject) => {
+      db.once('open', () => {
+        console.log('✅ MongoDB Connected'.green);
+        resolve();
+      });
+      
+      // Handle connection timeout
+      setTimeout(() => {
+        reject(new Error('Connection timeout. Please check if MongoDB is running.'));
+      }, 10000);
+    });
+    
     return true;
   } catch (err) {
-    console.error('❌ MongoDB connection error:'.red, err.message);
+    console.error('\n❌ MongoDB connection failed:'.red);
+    console.error('Error details:'.red, err.message);
+    console.error('\nTroubleshooting tips:'.yellow);
+    console.error('1. Make sure MongoDB is running:'.yellow);
+    console.error('   $ brew services start mongodb-community'.gray);
+    console.error('2. Check MongoDB service status:'.yellow);
+    console.error('   $ brew services list | grep mongo'.gray);
+    console.error('3. Verify MongoDB port (default: 27017) is not in use'.yellow);
+    console.error('   $ lsof -i :27017'.gray);
     return false;
   }
 };
