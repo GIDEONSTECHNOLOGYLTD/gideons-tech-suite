@@ -19,6 +19,6 @@ router
   .post(createFolder);
 
 // /api/v1/projects/:projectId/folders/tree
-get('/tree', getFolderTree);
+router.get('/tree', getFolderTree);
 
 module.exports = router;
