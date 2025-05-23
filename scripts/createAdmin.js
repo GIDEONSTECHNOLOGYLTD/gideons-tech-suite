@@ -47,7 +47,9 @@ const askQuestion = (question, hidden = false) => {
 // Connect to DB
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
+    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/gideons-tech-suite';
+    console.log(`🔗 Connecting to MongoDB: ${mongoUri.split('@').pop()}`);
+    await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       useCreateIndex: true,
