@@ -16,8 +16,15 @@ const errorHandler = require('./middleware/error');
 const connectDB = require('./config/db');
 const setupWebSocket = require('./websocket/server');
 
-// Load env vars
-dotenv.config({ path: './config/config.env' });
+// Load env vars based on environment
+const envFile = process.env.NODE_ENV === 'production' 
+  ? './config/config.prod.env' 
+  : './config/config.env';
+
+dotenv.config({ path: envFile });
+
+// Log environment for debugging
+console.log(`Running in ${process.env.NODE_ENV} mode`.yellow.bold);
 
 // Connect to database
 connectDB();
@@ -35,10 +42,37 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Set security headers
-app.use(helmet());
+const cspDefaults = helmet.contentSecurityPolicy.getDefaultDirectives();
+delete cspDefaults['upgrade-insecure-requests'];
 
-// Enable CORS
-app.use(cors());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...cspDefaults,
+        'connect-src': ["'self'", process.env.FRONTEND_URL, 'ws:'].concat(
+          process.env.NODE_ENV === 'development' ? ['ws://localhost:*'] : []
+        ),
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
+
+// Enable CORS with production/development settings
+const corsOptions = {
+  origin: process.env.FRONTEND_URL,
+  credentials: true,
+  optionsSuccessStatus: 200 // For legacy browser support
+};
+
+app.use(cors(corsOptions));
+
+// Trust proxy (important for rate limiting and secure cookies in production)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1); // trust first proxy
+}
 
 // Rate limiting
 const limiter = rateLimit({
