@@ -49,8 +49,12 @@ exports.getDashboardStats = asyncHandler(async (req, res, next) => {
     
     // Get document statistics
     const totalDocuments = await Document.countDocuments({
-      'access.user': userId,
-      'access.permission': { $in: ['view', 'edit', 'manage'] }
+      'access': {
+        $elemMatch: {
+          user: userId,
+          permission: { $in: ['view', 'edit', 'manage'] }
+        }
+      }
     });
     
     // Get project statistics
