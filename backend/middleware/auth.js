@@ -6,22 +6,23 @@ const User = require('../models/User');
 exports.protect = async (req, res, next) => {
   let token;
 
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
+  console.log('Auth middleware - Headers:', JSON.stringify(req.headers, null, 2));
+
+  // Get token from header or cookie
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     // Set token from Bearer token in header
     token = req.headers.authorization.split(' ')[1];
-  } 
-  // Set token from cookie
-  // else if (req.cookies.token) {
-  //   token = req.cookies.token;
-  // }
-
+    console.log('Token found in Authorization header');
+  } else if (req.cookies && req.cookies.token) {
+    // Set token from cookie
+    token = req.cookies.token;
+    console.log('Token found in cookie');
+  }
 
   // Make sure token exists
   if (!token) {
-    return next(new ErrorResponse('Not authorized to access this route', 401));
+    console.error('No token provided');
+    return next(new ErrorResponse('Not authorized to access this route - No token provided', 401));
   }
 
   try {
@@ -31,24 +32,39 @@ exports.protect = async (req, res, next) => {
       return next(new ErrorResponse('Server configuration error', 500));
     }
     
+    console.log('Verifying token...');
+    
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     if (!decoded || !decoded.id) {
       console.error('Invalid token payload:', decoded);
-      return next(new ErrorResponse('Invalid token', 401));
+      return next(new ErrorResponse('Invalid token payload', 401));
     }
 
-    const user = await User.findById(decoded.id);
+    console.log('Token verified, looking up user with ID:', decoded.id);
+    const user = await User.findById(decoded.id).select('-password');
     
     if (!user) {
       console.error('User not found for ID:', decoded.id);
       return next(new ErrorResponse('User not found', 404));
     }
     
+    console.log('User found and authenticated:', user.email);
     req.user = user;
     next();
   } catch (err) {
+    console.error('Authentication error:', err.message);
+    
+    if (err.name === 'JsonWebTokenError') {
+      return next(new ErrorResponse('Invalid token', 401));
+    }
+    
+    if (err.name === 'TokenExpiredError') {
+      return next(new ErrorResponse('Token expired', 401));
+    }
+    
+    console.error('Unexpected auth error:', err);
     console.error('Authentication error:', err.message);
     if (err.name === 'JsonWebTokenError') {
       return next(new ErrorResponse('Invalid token', 401));
