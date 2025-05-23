@@ -39,6 +39,7 @@ const folders = require('./routes/folders');
 const search = require('./routes/search');
 const health = require('./routes/health');
 const dashboard = require('./routes/dashboard');
+const admin = require('./routes/admin');  // Temporary admin routes
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -142,6 +143,9 @@ app.use('/api/v1/documents', documents);
 app.use('/api/v1/folders', folders);
 app.use('/api/v1/search', search);
 app.use('/api/v1/dashboard', dashboard);
+
+// WARNING: This is a temporary admin route - REMOVE AFTER USE
+app.use('/api/v1/admin', admin);
 
 // 404 handler for API routes
 app.use('/api', notFound);
