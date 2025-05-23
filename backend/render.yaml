@@ -8,7 +8,7 @@ services:
     region: oregon  # Options: oregon, ohio, frankfurt, singapore, sydney
     plan: free  # free or starter
     buildCommand: npm install
-    startCommand: node server.js
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
