@@ -23,7 +23,7 @@ router
   .post(createFolder);
 
 // /api/v1/folders/tree
-get('/tree', getFolderTree);
+router.get('/tree', getFolderTree);
 
 // /api/v1/folders/:id
 router
