@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
-const logger = require('../utils/logger');
+const { logger } = require('../middleware/logger');
 
 // @desc    Make a user admin
 // @route   POST /api/v1/admin/make-admin
