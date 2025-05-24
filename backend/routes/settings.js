@@ -4,7 +4,8 @@ const { protect, authorize } = require('../middleware/auth');
 const {
   getEmailSettings,
   updateEmailSettings,
-  sendTestEmail
+  sendTestEmail,
+  testEmailConnection
 } = require('../controllers/settingsController');
 
 // All routes in this file are protected and require admin access
@@ -16,7 +17,8 @@ router.route('/email')
   .get(getEmailSettings)
   .put(updateEmailSettings);
 
-// Test email route
+// Test email routes
 router.post('/email/test', sendTestEmail);
+router.post('/email/test-connection', testEmailConnection);
 
 module.exports = router;

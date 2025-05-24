@@ -1,136 +1,223 @@
 const asyncHandler = require('../middleware/async');
 const ErrorResponse = require('../utils/errorResponse');
-const nodemailer = require('nodemailer');
+const EmailSettings = require('../models/EmailSettings');
+const sendEmail = require('../utils/sendEmail');
 
-// @desc    Get email settings
-// @route   GET /api/v1/admin/settings/email
-// @access  Private/Admin
+/**
+ * @desc    Get current email settings
+ * @route   GET /api/v1/admin/settings/email
+ * @access  Private/Admin
+ */
 exports.getEmailSettings = asyncHandler(async (req, res, next) => {
-  // In a real app, you would get these from a database
-  const emailSettings = {
-    enabled: process.env.EMAIL_ENABLED === 'true',
-    host: process.env.EMAIL_HOST || '',
-    port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: process.env.EMAIL_SECURE === 'true',
-    username: process.env.EMAIL_USERNAME || '',
-    fromEmail: process.env.EMAIL_FROM || '',
-    fromName: process.env.EMAIL_FROM_NAME || 'Gideon\'s Tech Suite'
-  };
-
-  res.status(200).json({
-    success: true,
-    data: emailSettings
-  });
-});
-
-// @desc    Update email settings
-// @route   PUT /api/v1/admin/settings/email
-// @access  Private/Admin
-exports.updateEmailSettings = asyncHandler(async (req, res, next) => {
-  const {
-    enabled,
-    host,
-    port,
-    secure,
-    username,
-    password,
-    fromEmail,
-    fromName
-  } = req.body;
-
-  // In a real app, you would save these to a database
-  // For now, we'll just validate and return the settings
-  const updatedSettings = {
-    enabled: Boolean(enabled),
-    host: host || '',
-    port: parseInt(port) || 587,
-    secure: Boolean(secure),
-    username: username || '',
-    fromEmail: fromEmail || '',
-    fromName: fromName || 'Gideon\'s Tech Suite'
-  };
-
-  // In a real app, you would save these settings to a database
-  // and update environment variables or a config file
-  
-  // For demonstration, we'll just return the updated settings
-  res.status(200).json({
-    success: true,
-    data: updatedSettings,
-    message: 'Email settings updated successfully. In a production environment, these would be saved to a database.'
-  });
-});
-
-// @desc    Send test email
-// @route   POST /api/v1/admin/settings/email/test
-// @access  Private/Admin
-exports.sendTestEmail = asyncHandler(async (req, res, next) => {
-  const { email } = req.body;
-  
-  if (!email) {
-    return next(new ErrorResponse('Email address is required', 400));
-  }
-
-  // In a real app, you would use the saved email settings
-  const emailConfig = {
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: process.env.EMAIL_SECURE === 'true',
-    auth: {
-      user: process.env.EMAIL_USERNAME,
-      pass: process.env.EMAIL_PASSWORD
-    }
-  };
-
-  // Create a test account if no email config is set up
-  let testAccount;
-  if (!emailConfig.host) {
-    testAccount = await nodemailer.createTestAccount();
-    emailConfig.host = 'smtp.ethereal.email';
-    emailConfig.port = 587;
-    emailConfig.secure = false;
-    emailConfig.auth = {
-      user: testAccount.user,
-      pass: testAccount.pass
-    };
-  }
-
   try {
-    const transporter = nodemailer.createTransport(emailConfig);
+    const settings = await EmailSettings.findOne().sort({ updatedAt: -1 }).lean();
+    
+    if (!settings) {
+      // Return default settings if none exist
+      const defaultSettings = new EmailSettings();
+      return res.status(200).json({ 
+        success: true, 
+        data: defaultSettings.toObject({ virtuals: true }) 
+      });
+    }
+    
+    // The password is already excluded by the schema's toJSON transform
+    res.status(200).json({ 
+      success: true, 
+      data: settings 
+    });
+  } catch (error) {
+    console.error('Error fetching email settings:', error);
+    next(new ErrorResponse('Failed to retrieve email settings', 500));
+  }
+});
 
-    const info = await transporter.sendMail({
-      from: `"${process.env.EMAIL_FROM_NAME || 'Test'}" <${testAccount?.user || process.env.EMAIL_FROM}>`,
+/**
+ * @desc    Update email settings
+ * @route   PUT /api/v1/admin/settings/email
+ * @access  Private/Admin
+ */
+exports.updateEmailSettings = asyncHandler(async (req, res, next) => {
+  try {
+    const { 
+      enabled, 
+      host, 
+      port, 
+      secure, 
+      username, 
+      password, 
+      fromEmail, 
+      fromName 
+    } = req.body;
+
+    // Find the most recent settings or create new ones
+    let settings = await EmailSettings.findOne().sort({ updatedAt: -1 });
+    
+    if (!settings) {
+      settings = new EmailSettings();
+    }
+    
+    // Update fields if they are provided in the request
+    if (enabled !== undefined) settings.enabled = enabled;
+    if (host) settings.host = host;
+    if (port) settings.port = port;
+    if (secure !== undefined) settings.secure = secure;
+    if (username) settings.username = username;
+    if (password) settings.password = password;
+    if (fromEmail) settings.fromEmail = fromEmail;
+    if (fromName) settings.fromName = fromName;
+    
+    // If enabling email, validate the settings
+    if (settings.enabled) {
+      const requiredFields = ['host', 'port', 'username', 'password', 'fromEmail'];
+      const missingFields = requiredFields.filter(field => !settings[field]);
+      
+      if (missingFields.length > 0) {
+        return next(new ErrorResponse(
+          `Missing required fields when enabling email: ${missingFields.join(', ')}`,
+          400
+        ));
+      }
+      
+      // Test the connection if this is a new configuration
+      if (settings.isModified('host') || settings.isModified('port') || 
+          settings.isModified('username') || settings.isModified('password')) {
+        try {
+          await settings.testConnection();
+        } catch (error) {
+          return next(new ErrorResponse(
+            `Failed to verify email settings: ${error.message}`,
+            400
+          ));
+        }
+      }
+    }
+    
+    await settings.save();
+    
+    // Convert to object to apply schema transformations
+    const settingsObj = settings.toObject({ virtuals: true });
+    
+    res.status(200).json({
+      success: true,
+      data: settingsObj,
+      message: 'Email settings updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating email settings:', error);
+    next(new ErrorResponse('Failed to update email settings', 500));
+  }
+});
+
+/**
+ * @desc    Send a test email
+ * @route   POST /api/v1/admin/settings/email/test
+ * @access  Private/Admin
+ */
+exports.sendTestEmail = asyncHandler(async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return next(new ErrorResponse('Email address is required', 400));
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return next(new ErrorResponse('Please provide a valid email address', 400));
+    }
+    
+    // Get current settings
+    const settings = await EmailSettings.findOne().sort({ updatedAt: -1 });
+    if (!settings || !settings.enabled) {
+      return next(new ErrorResponse('Email service is not enabled or configured', 400));
+    }
+    
+    // Send test email
+    const result = await sendEmail({
       to: email,
       subject: 'Test Email from Gideon\'s Tech Suite',
       text: 'This is a test email to verify your email settings are working correctly.',
       html: `
-        <div>
-          <h2>Test Email</h2>
-          <p>This is a test email to verify your email settings are working correctly.</p>
-          <p>If you received this email, your email configuration is working!</p>
-          <hr />
-          <p style="color: #666; font-size: 0.9em;">
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Test Email from Gideon's Tech Suite</h2>
+          <p>This is a test email to verify that your email settings are working correctly.</p>
+          <p>If you're receiving this email, it means the email settings have been configured properly.</p>
+          <hr>
+          <p style="font-size: 12px; color: #666;">
             This is an automated message. Please do not reply to this email.
           </p>
         </div>
       `
     });
+    
+    // Update last tested timestamp
+    settings.lastTested = new Date();
+    settings.lastError = null;
+    await settings.save();
 
-    let response = {
+    res.status(200).json({
       success: true,
-      message: 'Test email sent successfully!',
-      previewUrl: null
-    };
-
-    // If using ethereal email, include the preview URL
-    (testAccount) {
-      response.previewUrl = nodemailer.getTestMessageUrl(info);
-      response.message += ' Check your ethereal email account for the test message.';
-    }
-
-    res.status(200).json(response);
+      message: 'Test email sent successfully',
+      data: {
+        messageId: result.messageId,
+        timestamp: new Date().toISOString()
+      }
+    });
   } catch (error) {
     console.error('Error sending test email:', error);
-    return next(new ErrorResponse('Failed to send test email', 500));
+    
+    // Update last error in settings
+    try {
+      const settings = await EmailSettings.findOne().sort({ updatedAt: -1 });
+      if (settings) {
+        settings.lastError = error.message;
+        await settings.save();
+      }
+    } catch (updateError) {
+      console.error('Failed to update email settings with error:', updateError);
+    }
+    
+    next(new ErrorResponse(
+      `Failed to send test email: ${error.message}`,
+      500
+    ));
+  }
+});
+
+/**
+ * @desc    Test email connection
+ * @route   POST /api/v1/admin/settings/email/test-connection
+ * @access  Private/Admin
+ */
+exports.testEmailConnection = asyncHandler(async (req, res, next) => {
+  try {
+    const settings = await EmailSettings.findOne().sort({ updatedAt: -1 });
+    
+    if (!settings) {
+      return next(new ErrorResponse('Email settings not found', 404));
+    }
+    
+    const result = await settings.testConnection();
+    
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        message: 'Email connection test successful',
+        data: {
+          lastTested: settings.lastTested
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Email connection test failed',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Error testing email connection:', error);
+    next(new ErrorResponse('Failed to test email connection', 500));
   }
 });

@@ -37,4 +37,7 @@ router.delete('/users/:id', deleteUser);
 // Audit Logs routes
 router.use('/audit-logs', auditLogRoutes);
 
+// Settings routes
+router.use('/settings', require('./settings'));
+
 module.exports = router;
