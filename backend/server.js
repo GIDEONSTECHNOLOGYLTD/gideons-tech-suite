@@ -257,15 +257,31 @@ app.use('/api/v1', apiV1Router);
 app.use('/health', health);
 app.use('/api/health', health);
 
-// Serve static assets in production if frontend build exists
+// Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
   const frontendBuildPath = path.join(__dirname, '../frontend/build');
+  const frontendPublicPath = path.join(__dirname, '../frontend/public');
   const indexHtmlPath = path.join(frontendBuildPath, 'index.html');
   
-  // Only serve frontend if build directory exists
+  // Serve static files from build directory if it exists
   if (require('fs').existsSync(frontendBuildPath)) {
     console.log('Serving frontend build from:', frontendBuildPath);
+    
+    // Serve static files from build directory
     app.use(express.static(frontendBuildPath));
+    
+    // Serve test-api.html from public directory
+    app.get('/test-api.html', (req, res) => {
+      const testApiPath = path.join(frontendPublicPath, 'test-api.html');
+      if (require('fs').existsSync(testApiPath)) {
+        res.sendFile(testApiPath);
+      } else {
+        res.status(404).json({
+          success: false,
+          error: 'Test API page not found'
+        });
+      }
+    });
     
     // Handle SPA routing - return index.html for all other routes
     app.get('*', (req, res) => {
@@ -281,6 +297,14 @@ if (process.env.NODE_ENV === 'production') {
     });
   } else {
     console.log('Frontend build not found. Only serving API endpoints.');
+    
+    // Serve test-api.html from public directory as fallback
+    const testApiPath = path.join(frontendPublicPath, 'test-api.html');
+    if (require('fs').existsSync(testApiPath)) {
+      app.get('/test-api.html', (req, res) => {
+        res.sendFile(testApiPath);
+      });
+    }
     
     // Handle root route
     app.get('/', (req, res) => {
