@@ -96,16 +96,13 @@ console.log('Allowed CORS origins:', allowedOrigins);
 // CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, etc)
-    if (!origin) return callback(null, true);
-    
     // Allow all origins in development
     if (process.env.NODE_ENV === 'development') {
       console.log('Development mode - allowing all origins');
       return callback(null, true);
     }
     
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // Allow requests with no origin (like mobile apps, curl, etc)
     if (!origin) {
       console.log('No origin in CORS check, allowing');
       return callback(null, true);
@@ -116,12 +113,21 @@ const corsOptions = {
     
     // Check if the origin is in the allowed list or is a subdomain of the allowed origins
     const isAllowed = allowedOrigins.some(allowedOrigin => {
-      const normalizedAllowed = allowedOrigin.replace(/\/+$/, '').toLowerCase();
-      return (
-        normalizedOrigin === normalizedAllowed ||
-        normalizedOrigin === `http://${normalizedAllowed.replace(/^https?:\/\//, '')}` ||
-        normalizedOrigin === `https://${normalizedAllowed.replace(/^https?:\/\//, '')}`
-      );
+      try {
+        const normalizedAllowed = allowedOrigin.replace(/\/+$/, '').toLowerCase();
+        const originUrl = new URL(normalizedOrigin);
+        const requestUrl = new URL(normalizedOrigin);
+        
+        // Check exact match or subdomain match
+        return (
+          normalizedOrigin === normalizedAllowed ||
+          (requestUrl.hostname.endsWith(originUrl.hostname) && 
+           originUrl.hostname.split('.').length <= requestUrl.hostname.split('.').length)
+        );
+      } catch (e) {
+        console.error('Error checking CORS origin:', e);
+        return false;
+      }
     });
     
     if (isAllowed) {
@@ -135,16 +141,20 @@ const corsOptions = {
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
   allowedHeaders: [
     'Content-Type',
     'Authorization',
     'X-Requested-With',
+    'X-XSRF-TOKEN',
+    'X-Requested-By',
     'Accept',
     'Origin',
     'Access-Control-Allow-Headers',
     'Access-Control-Allow-Origin',
     'Access-Control-Allow-Credentials',
+    'Access-Control-Request-Headers',
+    'Access-Control-Request-Method',
     'Cache-Control',
     'Pragma',
     'If-Modified-Since',
@@ -162,10 +172,11 @@ const corsOptions = {
     'X-RateLimit-Remaining',
     'X-RateLimit-Reset'
   ],
-  optionsSuccessStatus: 200, // For legacy browser support
+  optionsSuccessStatus: 200,
   preflightContinue: false
 };
 
+// Apply CORS middleware
 app.use(cors(corsOptions));
 
 // Handle preflight requests
@@ -174,10 +185,20 @@ app.options('*', cors(corsOptions));
 // Add CORS headers to all responses
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
+  if (origin && allowedOrigins.some(o => origin.includes(o.replace(/https?:\/\//, '')))) {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-XSRF-TOKEN, Accept, Origin, Cache-Control, Pragma, If-Modified-Since, Range, DNT, User-Agent');
+    res.header('Access-Control-Expose-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, X-Total-Count');
   }
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Max-Age', '86400'); // 24 hours
+    return res.status(204).end();
+  }
+  
   next();
 });
 
