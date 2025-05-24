@@ -319,7 +319,10 @@ app.use(fileupload({
   tempFileDir: '/tmp/'
 }));
 
-// Mount routers
+// Apply the regular api limiter to all routes
+app.use(apiLimiter);
+
+// Mount API routes first to ensure they take precedence
 app.use('/api/v1/auth', auth);
 app.use('/api/v1/admin', adminLimiter);
 app.use('/api/v1/admin/system', auditLogger()); // Apply audit logging middleware
@@ -327,13 +330,11 @@ app.use('/api/v1/admin/system', auditLogger()); // Apply audit logging middlewar
 // Apply rate limiting to auth routes
 app.use('/api/auth', authLimiter, auth);
 
-// Apply the regular api limiter to all routes
-app.use(apiLimiter);
-
-// Set static folders
-app.use(express.static(path.join(__dirname, 'public')));
-// Also serve static files from frontend's public directory
-app.use(express.static(path.join(__dirname, '../frontend/public')));
+// Set static folders - only in development
+if (process.env.NODE_ENV === 'development') {
+  app.use(express.static(path.join(__dirname, 'public')));
+  app.use(express.static(path.join(__dirname, '../frontend/public')));
+}
 
 // Dev logging middleware
 if (process.env.NODE_ENV === 'development') {
@@ -386,13 +387,20 @@ app.use('/api/health', health);
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
+  console.log('Configuring production static file serving...');
+  
   // Try multiple possible paths for the frontend build
   const possibleBuildPaths = [
-    path.join(__dirname, '../frontend/build'),  // For Render
-    path.join(__dirname, '../../frontend/build'), // For local development
-    path.join(__dirname, 'client/build'), // Alternative path
-    path.join(__dirname, 'frontend/build')     // Alternative path
+    path.join(__dirname, '../../frontend/build'),  // Local development (from backend directory)
+    path.join(__dirname, '../frontend/build'),   // Alternative path
+    path.join(__dirname, 'frontend/build'),      // Alternative path
+    path.join(__dirname, 'client/build'),        // Alternative path
+    path.join(process.cwd(), 'frontend/build')   // Absolute path from project root
   ];
+  
+  // Log the current working directory for debugging
+  console.log('Current working directory:', process.cwd());
+  console.log('__dirname:', __dirname);
   
   let clientBuildPath = '';
   
@@ -400,34 +408,42 @@ if (process.env.NODE_ENV === 'production') {
   for (const buildPath of possibleBuildPaths) {
     if (fs.existsSync(buildPath)) {
       clientBuildPath = buildPath;
-      console.log(`Serving static files from: ${clientBuildPath}`);
+      console.log(`Found frontend build at: ${clientBuildPath}`);
       break;
     }
   }
   
   if (clientBuildPath) {
+    console.log(`Configuring static file serving from: ${clientBuildPath}`);
+    
     // Serve static files from the React app
-    app.use(express.static(clientBuildPath, { index: false }));
+    app.use(express.static(clientBuildPath, { 
+      index: false,
+      fallthrough: true // Allow falling through to other routes
+    }));
     
     // Explicitly serve the favicon and other static assets
     app.get('/favicon.ico', (req, res) => {
+      console.log('Serving favicon.ico');
       res.sendFile(path.join(clientBuildPath, 'favicon.ico'));
     });
     
     app.get('/manifest.json', (req, res) => {
+      console.log('Serving manifest.json');
       res.sendFile(path.join(clientBuildPath, 'manifest.json'));
     });
     
     // Serve index.html for all other GET requests that don't match API routes
     app.get('*', (req, res, next) => {
-      // Skip API routes
-      if (req.path.startsWith('/api/')) {
+      // Skip API routes and static files
+      if (req.path.startsWith('/api/') || req.path.includes('.')) {
         return next();
       }
+      console.log(`Serving index.html for path: ${req.path}`);
       res.sendFile(path.join(clientBuildPath, 'index.html'));
     });
   } else {
-    console.warn('Could not find frontend build directory. Make sure to build the frontend.');
+    console.warn('Could not find frontend build directory. API will still function but frontend will not be served.');
     
     // Basic API info if frontend not found
     app.get('/', (req, res) => {
@@ -448,6 +464,24 @@ if (process.env.NODE_ENV === 'production') {
       });
     });
   }
+} else {
+  // In development, just provide API info at root
+  app.get('/', (req, res) => {
+    res.status(200).json({
+      success: true,
+      message: 'Gideon\'s Tech Suite API is running in development mode',
+      endpoints: [
+        '/api/v1/health',
+        '/api/v1/auth',
+        '/api/v1/projects',
+        '/api/v1/tasks',
+        '/api/v1/users',
+        '/api/v1/documents',
+        '/api/v1/folders',
+        '/api/v1/admin'
+      ]
+    });
+  });
 }
 
 // Error handler middleware (must be after the controllers)

@@ -49,27 +49,59 @@ exports.register = asyncHandler(async (req, res, next) => {
 // @access  Public
 exports.login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
+  console.log('Login attempt:', { email });
 
   // Validate email & password
   if (!email || !password) {
+    console.log('Login failed: Missing email or password');
     return next(new ErrorResponse('Please provide an email and password', 400));
   }
 
-  // Check for user
-  const user = await User.findOne({ email }).select('+password');
+  try {
+    // Check for user with case-insensitive email search
+    const user = await User.findOne({ 
+      email: { $regex: new RegExp(`^${email}$`, 'i') } 
+    }).select('+password');
 
-  if (!user) {
-    return next(new ErrorResponse('Invalid credentials', 401));
+    console.log('User found:', user ? {
+      _id: user._id,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      passwordLength: user.password ? user.password.length : 0
+    } : 'No user found');
+
+    if (!user) {
+      console.log('Login failed: User not found', { email });
+      return next(new ErrorResponse('Invalid credentials', 401));
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      console.log('Login failed: User account is inactive', { email });
+      return next(new ErrorResponse('Account is inactive. Please contact support.', 401));
+    }
+
+    // Check if password matches
+    console.log('Comparing password...');
+    const isMatch = await user.matchPassword(password);
+    console.log('Password match result:', isMatch, { 
+      userId: user._id,
+      passwordLength: password.length,
+      hashedPasswordLength: user.password.length
+    });
+
+    if (!isMatch) {
+      console.log('Login failed: Invalid password', { email });
+      return next(new ErrorResponse('Invalid credentials', 401));
+    }
+
+    console.log('Login successful, sending token response...');
+    sendTokenResponse(user, 200, res);
+  } catch (error) {
+    console.error('Login error:', error);
+    return next(new ErrorResponse('Login failed', 500));
   }
-
-  // Check if password matches
-  const isMatch = await user.matchPassword(password);
-
-  if (!isMatch) {
-    return next(new ErrorResponse('Invalid credentials', 401));
-  }
-
-  sendTokenResponse(user, 200, res);
 });
 
 // @desc    Get current logged in user
