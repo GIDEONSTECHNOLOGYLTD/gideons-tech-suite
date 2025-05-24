@@ -5,6 +5,16 @@ const Document = require('../models/Document');
 const Project = require('../models/Project');
 const mongoose = require('mongoose');
 
+// Helper function to safely convert string to ObjectId
+const toObjectId = (id) => {
+  try {
+    return mongoose.Types.ObjectId(id);
+  } catch (error) {
+    console.error('Invalid ObjectId:', id, error);
+    return null;
+  }
+};
+
 // @desc    Get dashboard statistics
 // @route   GET /api/v1/dashboard/stats
 // @access  Private
@@ -25,57 +35,66 @@ exports.getDashboardStats = asyncHandler(async (req, res, next) => {
   const userId = req.user.id;
   
   try {
-    console.log('Fetching task statistics for user:', userId);
+    console.log('Fetching dashboard stats for user:', userId);
     
-    // Get task statistics
-    const totalTasks = await Task.countDocuments({
-      $or: [
-        { assignedTo: { $in: [mongoose.Types.ObjectId(userId)] } },
-        { createdBy: mongoose.Types.ObjectId(userId) }
-      ]
-    });
-
-    const completedTasks = await Task.countDocuments({
-      $and: [
-        { status: 'Done' },
-        {
-          $or: [
-            { assignedTo: { $in: [mongoose.Types.ObjectId(userId)] } },
-            { createdBy: mongoose.Types.ObjectId(userId) }
-          ]
-        }
-      ]
-    });
-    
-    // Get document statistics
-    let totalDocuments = 0;
-    try {
-      totalDocuments = await Document.countDocuments({
-        'access': {
-          $elemMatch: {
-            user: mongoose.Types.ObjectId(userId),
-            permission: { $in: ['view', 'edit', 'manage'] }
-          }
-        }
-      });
-    } catch (docError) {
-      console.warn('Error counting documents, defaulting to 0:', docError);
-      totalDocuments = 0;
+    // Convert userId to ObjectId once
+    const userIdObj = toObjectId(userId);
+    if (!userIdObj) {
+      throw new Error('Invalid user ID format');
     }
     
-    // Get project statistics
-    let totalProjects = 0;
-    try {
-      totalProjects = await Project.countDocuments({
+    // Run queries in parallel for better performance
+    const [
+      totalTasks,
+      completedTasks,
+      totalDocuments,
+      totalProjects
+    ] = await Promise.all([
+      // Total tasks
+      Task.countDocuments({
         $or: [
-          { createdBy: mongoose.Types.ObjectId(userId) },
-          { team: { $in: [mongoose.Types.ObjectId(userId)] } }
+          { assignedTo: { $in: [userIdObj] } },
+          { createdBy: userIdObj }
         ]
-      });
-    } catch (projectError) {
-      console.warn('Error counting projects, defaulting to 0:', projectError);
-      totalProjects = 0;
-    }
+      }).catch(err => {
+        console.error('Error counting total tasks:', err);
+        return 0;
+      }),
+      
+      // Completed tasks
+      Task.countDocuments({
+        status: 'Done',
+        $or: [
+          { assignedTo: { $in: [userIdObj] } },
+          { createdBy: userIdObj }
+        ]
+      }).catch(err => {
+        console.error('Error counting completed tasks:', err);
+        return 0;
+      }),
+      
+      // Documents with access
+      Document.countDocuments({
+        $or: [
+          { 'access.user': userIdObj, 'access.permission': { $in: ['view', 'edit', 'manage'] } },
+          { createdBy: userIdObj }
+        ]
+      }).catch(err => {
+        console.error('Error counting documents:', err);
+        return 0;
+      }),
+      
+      // Projects
+      Project.countDocuments({
+        $or: [
+          { createdBy: userIdObj },
+          { team: { $in: [userIdObj] } }
+        ]
+      }).catch(err => {
+        console.error('Error counting projects:', err);
+        return 0;
+      })
+    ]);
     
     // Calculate completion percentage (avoid division by zero)
     const completionPercentage = totalTasks > 0 

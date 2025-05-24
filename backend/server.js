@@ -164,6 +164,16 @@ app.use(cors(corsOptions));
 // Handle preflight requests
 app.options('*', cors(corsOptions));
 
+// Add CORS headers to all responses
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  next();
+});
+
 // Trust proxy (important for rate limiting and secure cookies in production)
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1); // trust first proxy
