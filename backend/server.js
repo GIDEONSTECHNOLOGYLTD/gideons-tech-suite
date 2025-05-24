@@ -18,6 +18,7 @@ const setupWebSocket = require('./websocket/server');
 const { apiLimiter, authLimiter } = require('./middleware/rateLimiter');
 const setupSwagger = require('./config/swagger');
 const { validateId } = require('./validators/requestValidator');
+const auditLogger = require('./middleware/auditLogger');
 
 // Load env vars based on environment
 const envFile = process.env.NODE_ENV === 'production' 
@@ -49,6 +50,9 @@ const search = require('./routes/search');
 const health = require('./routes/health');
 const dashboard = require('./routes/dashboard');
 const admin = require('./routes/admin');
+const auditLogs = require('./routes/auditLogRoutes');
+const system = require('./routes/system');
+const settings = require('./routes/settings');
 
 const PORT = process.env.PORT || 5005;
 
@@ -152,40 +156,33 @@ const corsOptions = {
     'X-Requested-With',
     'X-XSRF-TOKEN',
     'X-Requested-By',
-    'X-Request-Id',
     'Accept',
     'Origin',
-    'Access-Control-Allow-Headers',
     'Access-Control-Allow-Origin',
     'Access-Control-Allow-Credentials',
+    'Access-Control-Allow-Headers',
     'Access-Control-Request-Headers',
     'Access-Control-Request-Method',
+    'X-Forwarded-For',
+    'X-Forwarded-Proto',
+    'X-Forwarded-Port',
+    'X-Forwarded-Host',
+    'X-Real-IP',
     'Cache-Control',
     'Pragma',
     'If-Modified-Since',
-    'Range',
-    'DNT',
-    'User-Agent',
-    'X-Custom-Header',
-    'X-Requested-With',
-    'X-Forwarded-For',
-    'X-Forwarded-Proto',
-    'X-Forwarded-Port'
-  ],
-  exposedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'Content-Length',
-    'X-Requested-With',
-    'X-Total-Count',
-    'X-RateLimit-Limit',
-    'X-RateLimit-Remaining',
-    'X-RateLimit-Reset',
     'X-Request-Id'
   ],
-  optionsSuccessStatus: 204,
+  exposedHeaders: [
+    'Content-Length',
+    'Content-Range',
+    'X-Total-Count',
+    'X-Request-Id',
+    'X-Response-Time'
+  ],
+  maxAge: 600, // 10 minutes
   preflightContinue: false,
-  maxAge: 600 // 10 minutes
+  optionsSuccessStatus: 204
 };
 
 // Apply CORS middleware
@@ -261,9 +258,16 @@ app.use(mongoSanitize());
 // Prevent XSS attacks
 app.use(xss());
 
-// Rate limiting
-app.use('/api/v1/auth/', authLimiter);
-app.use('/api/v1/', apiLimiter);
+// Mount routers
+app.use('/api/v1/auth', auth);
+app.use('/api/v1/admin', adminLimiter);
+app.use('/api/v1/admin/system', auditLogger()); // Apply audit logging middleware
+
+// Apply rate limiting to auth routes
+app.use('/api/auth', authLimiter, auth);
+
+// Apply the regular api limiter to all routes
+app.use(apiLimiter);
 
 // Set static folders
 app.use(express.static(path.join(__dirname, 'public')));
@@ -311,17 +315,19 @@ app.get('/api', (req, res) => {
 // Create and mount the API v1 router
 const apiV1Router = express.Router();
 
-// Mount all v1 routes
+// Mount routers
 apiV1Router.use('/auth', auth);
-apiV1Router.use('/projects', validateId, projects);
-apiV1Router.use('/tasks', validateId, tasks);
-apiV1Router.use('/users', validateId, users);
-apiV1Router.use('/documents', validateId, documents);
-apiV1Router.use('/folders', validateId, folders);
+apiV1Router.use('/users', users);
+apiV1Router.use('/projects', projects);
+apiV1Router.use('/tasks', tasks);
+apiV1Router.use('/documents', documents);
+apiV1Router.use('/folders', folders);
 apiV1Router.use('/search', search);
-apiV1Router.use('/health', health);
 apiV1Router.use('/dashboard', dashboard);
 apiV1Router.use('/admin', admin);
+apiV1Router.use('/audit-logs', auditLogs);
+apiV1Router.use('/system', system);
+apiV1Router.use('/admin/settings', settings);
 
 // Mount the v1 router
 app.use('/api/v1', apiV1Router);

@@ -6,6 +6,7 @@ const {
   deleteUser
 } = require('../controllers/adminController');
 const { protect, authorize } = require('../middleware/auth');
+const auditLogRoutes = require('./auditLogRoutes');
 
 const router = express.Router();
 
@@ -32,5 +33,8 @@ router.get('/users', getUsers);
 router.get('/users/:id', getUser);
 router.post('/make-admin', makeUserAdmin);
 router.delete('/users/:id', deleteUser);
+
+// Audit Logs routes
+router.use('/audit-logs', auditLogRoutes);
 
 module.exports = router;
