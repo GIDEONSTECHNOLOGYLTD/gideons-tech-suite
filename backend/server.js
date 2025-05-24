@@ -342,63 +342,30 @@ app.use('/api/health', health);
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
-  const frontendBuildPath = path.join(__dirname, '../frontend/build');
-  const frontendPublicPath = path.join(__dirname, '../frontend/public');
+  // Path to the frontend build directory
+  const frontendBuildPath = path.join(__dirname, '../../frontend/build');
   const indexHtmlPath = path.join(frontendBuildPath, 'index.html');
   
-  // Serve static files from build directory if it exists
+  // Check if frontend build exists
   if (require('fs').existsSync(frontendBuildPath)) {
     console.log('Serving frontend build from:', frontendBuildPath);
     
-    // Serve static files from build directory with proper caching
-    app.use(express.static(frontendBuildPath, {
-      etag: true,
-      maxAge: '1y',
-      setHeaders: (res, path) => {
-        // Set proper cache control for static assets
-        if (/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/.test(path)) {
-          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        }
-      }
-    }));
+    // Serve static files from the React app
+    app.use(express.static(frontendBuildPath));
     
-    // Serve test-api.html from public directory
-    app.get('/test-api.html', (req, res) => {
-      const testApiPath = path.join(frontendPublicPath, 'test-api.html');
-      if (require('fs').existsSync(testApiPath)) {
-        res.sendFile(testApiPath);
-      } else {
-        res.status(404).json({
-          success: false,
-          error: 'Test API page not found'
-        });
-      }
+    // Handle API requests first
+    app.use('/api', (req, res, next) => {
+      next();
     });
     
-    // Handle SPA routing - serve index.html for all other routes
+    // For all other requests, send back React's index.html file
     app.get('*', (req, res) => {
-      if (require('fs').existsSync(indexHtmlPath)) {
-        res.sendFile(indexHtmlPath);
-      } else {
-        res.status(404).json({
-          success: false,
-          error: 'Frontend build not found',
-          message: 'The frontend application is not available at this time.'
-        });
-      }
+      res.sendFile(indexHtmlPath);
     });
   } else {
     console.log('Frontend build not found. Only serving API endpoints.');
     
-    // Serve test-api.html from public directory as fallback
-    const testApiPath = path.join(frontendPublicPath, 'test-api.html');
-    if (require('fs').existsSync(testApiPath)) {
-      app.get('/test-api.html', (req, res) => {
-        res.sendFile(testApiPath);
-      });
-    }
-    
-    // Handle root route
+    // Handle root route with API info
     app.get('/', (req, res) => {
       res.status(200).json({
         success: true,
