@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 // Helper function to safely convert string to ObjectId
 const toObjectId = (id) => {
   try {
-    return mongoose.Types.ObjectId(id);
+    return new mongoose.Types.ObjectId(id);
   } catch (error) {
     console.error('Invalid ObjectId:', id, error);
     return null;
