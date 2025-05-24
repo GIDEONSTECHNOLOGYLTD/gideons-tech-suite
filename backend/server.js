@@ -258,6 +258,19 @@ app.use(mongoSanitize());
 // Prevent XSS attacks
 app.use(xss());
 
+// Body parser - must be before route handlers
+app.use(express.json());
+
+// Cookie parser
+app.use(cookieParser());
+
+// File uploading
+app.use(fileupload({
+  limits: { fileSize: process.env.MAX_FILE_UPLOAD || 5 * 1024 * 1024 }, // 5MB default
+  useTempFiles: true,
+  tempFileDir: '/tmp/'
+}));
+
 // Mount routers
 app.use('/api/v1/auth', auth);
 app.use('/api/v1/admin', adminLimiter);
@@ -273,19 +286,6 @@ app.use(apiLimiter);
 app.use(express.static(path.join(__dirname, 'public')));
 // Also serve static files from frontend's public directory
 app.use(express.static(path.join(__dirname, '../frontend/public')));
-
-// File uploading
-app.use(fileupload({
-  limits: { fileSize: process.env.MAX_FILE_UPLOAD || 5 * 1024 * 1024 }, // 5MB default
-  useTempFiles: true,
-  tempFileDir: '/tmp/'
-}));
-
-// Body parser
-app.use(express.json());
-
-// Cookie parser
-app.use(cookieParser());
 
 // Dev logging middleware
 if (process.env.NODE_ENV === 'development') {
