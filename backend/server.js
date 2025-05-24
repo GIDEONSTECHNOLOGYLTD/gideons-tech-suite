@@ -108,21 +108,25 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    // Normalize the origin by removing trailing slashes and converting to lowercase
-    const normalizedOrigin = origin.replace(/\/+$/, '').toLowerCase();
+    // Normalize the origin by removing protocols and trailing slashes
+    const normalizeUrl = (url) => {
+      return url.replace(/^https?:\/\//, '').replace(/\/+$/, '').toLowerCase();
+    };
+    
+    const normalizedOrigin = normalizeUrl(origin);
     
     // Check if the origin is in the allowed list or is a subdomain of the allowed origins
     const isAllowed = allowedOrigins.some(allowedOrigin => {
       try {
-        const normalizedAllowed = allowedOrigin.replace(/\/+$/, '').toLowerCase();
-        const originUrl = new URL(normalizedOrigin);
-        const requestUrl = new URL(normalizedOrigin);
+        const normalizedAllowed = normalizeUrl(allowedOrigin);
+        const originDomain = normalizedAllowed.split('/')[0];
+        const requestDomain = normalizedOrigin.split('/')[0];
         
         // Check exact match or subdomain match
         return (
-          normalizedOrigin === normalizedAllowed ||
-          (requestUrl.hostname.endsWith(originUrl.hostname) && 
-           originUrl.hostname.split('.').length <= requestUrl.hostname.split('.').length)
+          requestDomain === originDomain ||
+          (requestDomain.endsWith(`.${originDomain}`) && 
+           originDomain.split('.').length <= requestDomain.split('.').length)
         );
       } catch (e) {
         console.error('Error checking CORS origin:', e);
@@ -148,6 +152,7 @@ const corsOptions = {
     'X-Requested-With',
     'X-XSRF-TOKEN',
     'X-Requested-By',
+    'X-Request-Id',
     'Accept',
     'Origin',
     'Access-Control-Allow-Headers',
@@ -160,7 +165,12 @@ const corsOptions = {
     'If-Modified-Since',
     'Range',
     'DNT',
-    'User-Agent'
+    'User-Agent',
+    'X-Custom-Header',
+    'X-Requested-With',
+    'X-Forwarded-For',
+    'X-Forwarded-Proto',
+    'X-Forwarded-Port'
   ],
   exposedHeaders: [
     'Content-Type',
@@ -170,37 +180,72 @@ const corsOptions = {
     'X-Total-Count',
     'X-RateLimit-Limit',
     'X-RateLimit-Remaining',
-    'X-RateLimit-Reset'
+    'X-RateLimit-Reset',
+    'X-Request-Id'
   ],
-  optionsSuccessStatus: 200,
-  preflightContinue: false
+  optionsSuccessStatus: 204,
+  preflightContinue: false,
+  maxAge: 600 // 10 minutes
 };
 
 // Apply CORS middleware
-app.use(cors(corsOptions));
-
-// Handle preflight requests
-app.options('*', cors(corsOptions));
-
-// Add CORS headers to all responses
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && allowedOrigins.some(o => origin.includes(o.replace(/https?:\/\//, '')))) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight requests first
+  if (req.method === 'OPTIONS') {
+    // Set CORS headers
+    res.header('Access-Control-Allow-Origin', origin || '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-XSRF-TOKEN, Accept, Origin, Cache-Control, Pragma, If-Modified-Since, Range, DNT, User-Agent');
-    res.header('Access-Control-Expose-Headers', 'Content-Type, Authorization, Content-Length, X-Requested-With, X-Total-Count');
+    res.header('Access-Control-Allow-Headers', [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-XSRF-TOKEN',
+      'X-Request-Id',
+      'Accept',
+      'Origin',
+      'Cache-Control',
+      'Pragma',
+      'If-Modified-Since',
+      'Range',
+      'DNT',
+      'User-Agent'
+    ].join(', '));
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400'); // 24 hours
+    res.header('Content-Length', '0');
+    return res.status(204).end();
   }
   
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.header('Access-Control-Max-Age', '86400'); // 24 hours
-    return res.status(204).end();
+  // For non-OPTIONS requests, apply CORS headers
+  if (origin) {
+    const isAllowed = allowedOrigins.some(o => {
+      try {
+        const normalizedOrigin = origin.replace(/^https?:\/\//, '').replace(/\/+$/, '').toLowerCase();
+        const normalizedAllowed = o.replace(/^https?:\/\//, '').replace(/\/+$/, '').toLowerCase();
+        return (
+          normalizedOrigin === normalizedAllowed ||
+          normalizedOrigin.endsWith(`.${normalizedAllowed}`)
+        );
+      } catch (e) {
+        console.error('Error checking CORS origin:', e);
+        return false;
+      }
+    });
+    
+    if (isAllowed || process.env.NODE_ENV === 'development') {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Vary', 'Origin');
+    }
   }
   
   next();
 });
+
+// Apply standard CORS middleware for non-OPTIONS requests
+app.use(cors(corsOptions));
 
 // Trust proxy (important for rate limiting and secure cookies in production)
 if (process.env.NODE_ENV === 'production') {
