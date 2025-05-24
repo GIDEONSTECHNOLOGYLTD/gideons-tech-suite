@@ -20,16 +20,24 @@ const setupSwagger = require('./config/swagger');
 const { validateId } = require('./validators/requestValidator');
 const auditLogger = require('./middleware/auditLogger');
 
-// Load env vars based on environment
-const envFile = process.env.NODE_ENV === 'production' 
-  ? './config/production.env' 
-  : './config/config.env';
+// Load environment variables
+dotenv.config();
 
-dotenv.config({ path: envFile });
+// Validate required environment variables
+const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
-console.log(`Environment: ${process.env.NODE_ENV}`);
-console.log(`MongoDB URI: ${process.env.MONGODB_URI ? 'Set' : 'Not set'}`);
-console.log(`JWT Secret: ${process.env.JWT_SECRET ? 'Set' : 'Not set'}`);
+if (missingVars.length > 0) {
+  console.error('Error: The following required environment variables are missing:'.red.bold);
+  missingVars.forEach(varName => console.error(`- ${varName}`.red));
+  process.exit(1);
+}
+
+// Log environment info (without sensitive data)
+console.log(`Environment: ${process.env.NODE_ENV}`.cyan.bold);
+console.log(`Server running in ${process.env.NODE_ENV} mode`.yellow.bold);
+console.log(`MongoDB connected: ${process.env.MONGODB_URI ? 'Yes' : 'No'}`);
+console.log(`JWT Secret: ${process.env.JWT_SECRET ? 'Set' : 'Not set'}`.grey);
 
 // Log environment for debugging
 console.log(`Running in ${process.env.NODE_ENV} mode`.yellow.bold);

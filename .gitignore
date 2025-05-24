@@ -12,10 +12,10 @@ node_modules/
 
 # Environment variables
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+/config/*.env
+!*/config/*.example
 
 # Debug logs
 npm-debug.log*

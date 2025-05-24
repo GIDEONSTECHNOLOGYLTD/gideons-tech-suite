@@ -2,53 +2,93 @@
 
 A comprehensive business management application for tech companies.
 
+## 🔒 Security Notice
+
+**Important**: This project uses environment variables to store sensitive information like database credentials and API keys. Never commit these files to version control.
+
 ## Project Structure
 
 - `/frontend` - React.js frontend application
 - `/backend` - Node.js/Express backend API
 - `/docs` - Project documentation
+- `/scripts` - Utility scripts for project setup
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- Node.js (v14 or later)
+- Node.js (v16 or later)
 - npm or yarn
 - MongoDB (local or MongoDB Atlas)
 
-### Backend Setup
+### 🔧 Environment Setup
 
-1. Navigate to the backend directory:
+1. **Setup Environment Variables**
+
+   Run the interactive setup script to configure your environment:
+   ```bash
+   npm run env:setup
    ```
-   cd backend
+   This will guide you through setting up the required environment variables.
+
+2. **Manual Setup (Alternative)**
+   
+   Copy the example environment file and update the values:
+   ```bash
+   cp backend/config/example.env backend/config/.env
+   ```
+   Then edit the `.env` file with your configuration.
+
+### 🖥️ Backend Setup
+
+1. Install dependencies:
+   ```bash
+   npm run install:backend
    ```
 
-2. Install dependencies:
-   ```
-   npm install
-   ```
-
-3. Start the development server:
-   ```
+2. Start the development server:
+   ```bash
    npm run dev
    ```
 
-### Frontend Setup
+### 💻 Frontend Setup
 
-1. Navigate to the frontend directory:
-   ```
-   cd frontend
-   ```
-
-2. Install dependencies:
-   ```
-   npm install
+1. Install dependencies:
+   ```bash
+   npm run install:frontend
    ```
 
-3. Start the development server:
+2. Start the development server:
+   ```bash
+   cd frontend && npm start
    ```
-   npm start
+
+## 🔒 Security Best Practices
+
+1. **Never commit sensitive data** to version control
+2. Use strong, unique passwords for all services
+3. Regularly rotate your secrets and API keys
+4. Use environment variables for all configuration
+5. Keep your dependencies up to date
+
+## 🛡️ Production Deployment
+
+1. Set up environment variables in your hosting provider
+2. Use HTTPS in production
+3. Enable CORS only for trusted domains
+4. Set appropriate security headers
+5. Monitor your application logs
+
+## 🔄 Updating Environment Variables
+
+If you need to update your environment variables:
+
+1. Run the setup script again:
+   ```bash
+   npm run env:setup
    ```
+2. Or manually update the appropriate `.env` file
+3. Restart your application for changes to take effect
 
 ## Features (Planned)
 
