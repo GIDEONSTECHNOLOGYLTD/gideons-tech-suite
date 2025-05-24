@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "prestart": "cd frontend && npm install && npm run build",
+    "prestart": "cd frontend && npm install && NODE_OPTIONS=--max_old_space_size=4096 npm run build",
     "start": "cd backend && node server.js",
     "postinstall": "cd backend && npm install && cd ../frontend && npm install",
-    "build": "cd frontend && npm install && npm run build && cd ../backend && npm install",
+    "build": "cd frontend && npm install && NODE_OPTIONS=--max_old_space_size=4096 npm run build && cd ../backend && npm install",
     "install:backend": "cd backend && npm install",
     "install:frontend": "cd frontend && npm install",
     "admin:create": "node scripts/createAdmin.js"
