@@ -182,8 +182,10 @@ app.use(xss());
 app.use('/api/v1/auth/', authLimiter);
 app.use('/api/v1/', apiLimiter);
 
-// Set static folder
+// Set static folders
 app.use(express.static(path.join(__dirname, 'public')));
+// Also serve static files from frontend's public directory
+app.use(express.static(path.join(__dirname, '../frontend/public')));
 
 // File uploading
 app.use(fileupload({
