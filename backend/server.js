@@ -15,6 +15,9 @@ const fileupload = require('express-fileupload');
 const { errorHandler, notFound } = require('./middleware/error');
 const connectDB = require('./config/db');
 const setupWebSocket = require('./websocket/server');
+const { apiLimiter, authLimiter } = require('./middleware/rateLimiter');
+const setupSwagger = require('./config/swagger');
+const { validateId } = require('./validators/requestValidator');
 
 // Load env vars based on environment
 const envFile = process.env.NODE_ENV === 'production' 
@@ -26,8 +29,14 @@ dotenv.config({ path: envFile });
 // Log environment for debugging
 console.log(`Running in ${process.env.NODE_ENV} mode`.yellow.bold);
 
+// Initialize Express app
+const app = express();
+
 // Connect to database
 connectDB();
+
+// Setup Swagger documentation
+setupSwagger(app);
 
 // Route files
 const auth = require('./routes/auth');
@@ -39,10 +48,9 @@ const folders = require('./routes/folders');
 const search = require('./routes/search');
 const health = require('./routes/health');
 const dashboard = require('./routes/dashboard');
-const admin = require('./routes/admin');  // Temporary admin routes
+const admin = require('./routes/admin');
 
-const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5005;
 
 // Set security headers
 const cspDefaults = helmet.contentSecurityPolicy.getDefaultDirectives();
@@ -51,15 +59,22 @@ delete cspDefaults['upgrade-insecure-requests'];
 app.use(
   helmet({
     contentSecurityPolicy: {
+      useDefaults: true,
       directives: {
         ...cspDefaults,
-        'connect-src': ["'self'", process.env.FRONTEND_URL, 'ws:'].concat(
-          process.env.NODE_ENV === 'development' ? ['ws://localhost:*'] : []
-        ),
+        'connect-src': [
+          "'self'",
+          'https://gideons-tech-suite.onrender.com',
+          'wss://gideons-tech-suite.onrender.com',
+          ...(process.env.NODE_ENV === 'development' ? ['ws:', 'http://localhost:*'] : []),
+        ],
+        'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+        'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+        'style-src': ["'self'", "'unsafe-inline'"],
       },
     },
-    crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginEmbedderPolicy: false,
   })
 );
 
@@ -78,8 +93,15 @@ const allowedOrigins = [
 // Log allowed origins for debugging
 console.log('Allowed CORS origins:', allowedOrigins);
 
+// CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
+    // Allow all origins in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Development mode - allowing all origins');
+      return callback(null, true);
+    }
+    
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) {
       console.log('No origin in CORS check, allowing');
@@ -111,8 +133,28 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-CSRF-Token', 'X-Requested-With', 'X-Requested-By', 'X-Requested-For'],
-  exposedHeaders: ['Content-Range', 'X-Total-Count'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With', 
+    'Accept', 
+    'x-request-id',
+    'X-CSRF-Token', 
+    'X-Requested-By', 
+    'X-Requested-For',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Methods',
+    'Access-Control-Allow-Headers',
+    'Access-Control-Allow-Credentials'
+  ],
+  exposedHeaders: [
+    'Content-Range', 
+    'X-Content-Range',
+    'x-request-id',
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Methods',
+    'Access-Control-Allow-Headers'
+  ],
   optionsSuccessStatus: 200, // For legacy browser support
   preflightContinue: false
 };
@@ -127,22 +169,18 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1); // trust first proxy
 }
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again after 10 minutes'
-});
-app.use(limiter);
-
 // Prevent http param pollution
 app.use(hpp());
+
+// Sanitize data
+app.use(mongoSanitize());
 
 // Prevent XSS attacks
 app.use(xss());
 
-// Sanitize data
-app.use(mongoSanitize());
+// Rate limiting
+app.use('/api/v1/auth/', authLimiter);
+app.use('/api/v1/', apiLimiter);
 
 // Set static folder
 app.use(express.static(path.join(__dirname, 'public')));
@@ -190,15 +228,15 @@ const apiV1Router = express.Router();
 
 // Mount all v1 routes
 apiV1Router.use('/auth', auth);
-apiV1Router.use('/projects', projects);
-apiV1Router.use('/tasks', tasks);
-apiV1Router.use('/users', users);
-apiV1Router.use('/documents', documents);
-apiV1Router.use('/folders', folders);
+apiV1Router.use('/projects', validateId, projects);
+apiV1Router.use('/tasks', validateId, tasks);
+apiV1Router.use('/users', validateId, users);
+apiV1Router.use('/documents', validateId, documents);
+apiV1Router.use('/folders', validateId, folders);
 apiV1Router.use('/search', search);
+apiV1Router.use('/health', health);
 apiV1Router.use('/dashboard', dashboard);
 apiV1Router.use('/admin', admin);
-apiV1Router.use('/health', health);
 
 // Mount the v1 router
 app.use('/api/v1', apiV1Router);
