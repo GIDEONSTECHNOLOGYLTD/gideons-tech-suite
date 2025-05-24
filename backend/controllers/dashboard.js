@@ -30,40 +30,52 @@ exports.getDashboardStats = asyncHandler(async (req, res, next) => {
     // Get task statistics
     const totalTasks = await Task.countDocuments({
       $or: [
-        { assignedTo: userId },
-        { createdBy: userId }
+        { assignedTo: { $in: [mongoose.Types.ObjectId(userId)] } },
+        { createdBy: mongoose.Types.ObjectId(userId) }
       ]
     });
 
     const completedTasks = await Task.countDocuments({
       $and: [
-        { status: 'Done' }, // Changed from 'completed' to 'Done' to match the Task model enum
+        { status: 'Done' },
         {
           $or: [
-            { assignedTo: userId },
-            { createdBy: userId }
+            { assignedTo: { $in: [mongoose.Types.ObjectId(userId)] } },
+            { createdBy: mongoose.Types.ObjectId(userId) }
           ]
         }
       ]
     });
     
     // Get document statistics
-    const totalDocuments = await Document.countDocuments({
-      'access': {
-        $elemMatch: {
-          user: userId,
-          permission: { $in: ['view', 'edit', 'manage'] }
+    let totalDocuments = 0;
+    try {
+      totalDocuments = await Document.countDocuments({
+        'access': {
+          $elemMatch: {
+            user: mongoose.Types.ObjectId(userId),
+            permission: { $in: ['view', 'edit', 'manage'] }
+          }
         }
-      }
-    });
+      });
+    } catch (docError) {
+      console.warn('Error counting documents, defaulting to 0:', docError);
+      totalDocuments = 0;
+    }
     
     // Get project statistics
-    const totalProjects = await Project.countDocuments({
-      $or: [
-        { createdBy: userId },
-        { team: userId }
-      ]
-    });
+    let totalProjects = 0;
+    try {
+      totalProjects = await Project.countDocuments({
+        $or: [
+          { createdBy: mongoose.Types.ObjectId(userId) },
+          { team: { $in: [mongoose.Types.ObjectId(userId)] } }
+        ]
+      });
+    } catch (projectError) {
+      console.warn('Error counting projects, defaulting to 0:', projectError);
+      totalProjects = 0;
+    }
     
     // Calculate completion percentage (avoid division by zero)
     const completionPercentage = totalTasks > 0 
