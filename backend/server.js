@@ -4,6 +4,8 @@ const dotenv = require('dotenv');
 const colors = require('colors');
 const morgan = require('morgan');
 const path = require('path');
+const fs = require('fs');
+const { logger, requestLogger } = require('./config/monitoring');
 const cors = require('cors');
 const helmet = require('helmet');
 const xss = require('xss-clean');
@@ -20,8 +22,20 @@ const setupSwagger = require('./config/swagger');
 const { validateId } = require('./validators/requestValidator');
 const auditLogger = require('./middleware/auditLogger');
 
+// Ensure logs directory exists
+const logDir = path.join(__dirname, 'logs');
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir);
+}
+
 // Load environment variables
-dotenv.config();
+dotenv.config({ path: './config/config.env' });
+
+// Log environment info
+logger.info(`Starting ${process.env.npm_package_name} v${process.env.npm_package_version}`);
+logger.info(`Environment: ${process.env.NODE_ENV}`);
+logger.info(`Node version: ${process.version}`);
+logger.info(`Platform: ${process.platform} ${process.arch}`);
 
 // Validate required environment variables
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
@@ -52,8 +66,13 @@ connectDB();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Cookie parser
+// Middleware
 app.use(cookieParser());
+
+// Request logging
+if (process.env.NODE_ENV !== 'test') {
+  app.use(requestLogger);
+}
 
 // Dev logging middleware
 if (process.env.NODE_ENV === 'development') {
@@ -455,9 +474,9 @@ server.on('error', (error) => {
   process.exit(1);
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err, promise) => {
-  console.error(`Error: ${err.message}`.red);
+// Handle unhandled promise rejections (logging is now handled in monitoring.js)
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', { promise, reason });
   // Close server & exit process
   server.close(() => process.exit(1));
 });

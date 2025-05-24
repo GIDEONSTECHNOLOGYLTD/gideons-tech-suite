@@ -12,6 +12,22 @@ A comprehensive business management application for tech companies.
 - `/backend` - Node.js/Express backend API
 - `/docs` - Project documentation
 - `/scripts` - Utility scripts for project setup
+- `/logs` - Application logs (created at runtime)
+
+## 📊 Monitoring & Logging
+
+The application includes comprehensive monitoring and logging:
+
+### Health Checks
+- `GET /health` - Comprehensive system health check
+- `GET /api/health` - Lightweight API health check
+
+### Logging
+- Logs are stored in the `logs/` directory
+- Log levels: error, warn, info, debug
+- Log rotation: 5MB per file, max 5 files per log type
+
+For detailed monitoring setup, see [MONITORING.md](MONITORING.md)
 
 ## 🚀 Getting Started
 

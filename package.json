@@ -18,6 +18,8 @@
     "env:validate": "node -e 'require(\"./backend/config/env-validator\")'"
   },
   "dependencies": {
+    "@logtail/node": "^0.4.0",
+    "@logtail/winston": "^0.4.4",
     "bcryptjs": "^3.0.2",
     "colors": "^1.4.0",
     "date-fns": "^4.1.0",
@@ -26,7 +28,8 @@
     "mongoose": "^8.15.0",
     "nodemailer": "^7.0.3",
     "pug": "^3.0.3",
-    "readline-sync": "^1.4.10"
+    "readline-sync": "^1.4.10",
+    "winston": "^3.11.0"
   },
   "engines": {
     "node": ">=14.0.0"
