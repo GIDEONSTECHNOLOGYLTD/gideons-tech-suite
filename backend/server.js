@@ -96,6 +96,9 @@ console.log('Allowed CORS origins:', allowedOrigins);
 // CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    
     // Allow all origins in development
     if (process.env.NODE_ENV === 'development') {
       console.log('Development mode - allowing all origins');
@@ -132,28 +135,32 @@ const corsOptions = {
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With', 
-    'Accept', 
-    'x-request-id',
-    'X-CSRF-Token', 
-    'X-Requested-By', 
-    'X-Requested-For',
-    'Access-Control-Allow-Origin',
-    'Access-Control-Allow-Methods',
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
     'Access-Control-Allow-Headers',
-    'Access-Control-Allow-Credentials'
+    'Access-Control-Allow-Origin',
+    'Access-Control-Allow-Credentials',
+    'Cache-Control',
+    'Pragma',
+    'If-Modified-Since',
+    'Range',
+    'DNT',
+    'User-Agent'
   ],
   exposedHeaders: [
-    'Content-Range', 
-    'X-Content-Range',
-    'x-request-id',
-    'Access-Control-Allow-Origin',
-    'Access-Control-Allow-Methods',
-    'Access-Control-Allow-Headers'
+    'Content-Type',
+    'Authorization',
+    'Content-Length',
+    'X-Requested-With',
+    'X-Total-Count',
+    'X-RateLimit-Limit',
+    'X-RateLimit-Remaining',
+    'X-RateLimit-Reset'
   ],
   optionsSuccessStatus: 200, // For legacy browser support
   preflightContinue: false
