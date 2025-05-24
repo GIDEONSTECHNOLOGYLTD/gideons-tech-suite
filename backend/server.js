@@ -123,6 +123,9 @@ const corsOptions = {
     
     const normalizedOrigin = normalizeUrl(origin);
     
+    // Add debug logging for the origin check
+    console.log(`Checking CORS for origin: ${origin} (normalized: ${normalizedOrigin})`);
+    
     // Check if the origin is in the allowed list or is a subdomain of the allowed origins
     const isAllowed = allowedOrigins.some(allowedOrigin => {
       try {
@@ -131,11 +134,19 @@ const corsOptions = {
         const requestDomain = normalizedOrigin.split('/')[0];
         
         // Check exact match or subdomain match
-        return (
+        const isMatch = (
           requestDomain === originDomain ||
           (requestDomain.endsWith(`.${originDomain}`) && 
            originDomain.split('.').length <= requestDomain.split('.').length)
         );
+        
+        if (isMatch) {
+          console.log(`CORS origin match: ${requestDomain} matches ${originDomain}`);
+        } else {
+          console.log(`CORS origin no match: ${requestDomain} does not match ${originDomain}`);
+        }
+        
+        return isMatch;
       } catch (e) {
         console.error('Error checking CORS origin:', e);
         return false;
@@ -240,13 +251,11 @@ app.use((req, res, next) => {
       res.header('Access-Control-Allow-Credentials', 'true');
       res.header('Vary', 'Origin');
     }
+  } else {
+    // For non-preflight requests, use the standard CORS middleware
+    cors(corsOptions)(req, res, next);
   }
-  
-  next();
 });
-
-// Apply standard CORS middleware for non-OPTIONS requests
-app.use(cors(corsOptions));
 
 // Trust proxy (important for rate limiting and secure cookies in production)
 if (process.env.NODE_ENV === 'production') {
