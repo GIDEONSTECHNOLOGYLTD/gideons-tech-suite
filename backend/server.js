@@ -132,7 +132,8 @@ const allowedOrigins = [
   'https://frontend-t73t.onrender.com',
   'https://gideons-tech-suite.onrender.com',
   'https://gideons-tech-suite-frontend.onrender.com',
-  'https://gideons-tech-suite.vercel.app'
+  'https://gideons-tech-suite.vercel.app',
+  'https://gideons-tech-suite-frontend.vercel.app'
 ];
 
 // Log allowed origins for debugging
@@ -143,13 +144,11 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow all origins in development
     if (process.env.NODE_ENV === 'development') {
-      console.log('Development mode - allowing all origins');
       return callback(null, true);
     }
     
     // Allow requests with no origin (like mobile apps, curl, etc)
     if (!origin) {
-      console.log('No origin in CORS check, allowing');
       return callback(null, true);
     }
     
@@ -160,9 +159,6 @@ const corsOptions = {
     
     const normalizedOrigin = normalizeUrl(origin);
     
-    // Add debug logging for the origin check
-    console.log(`Checking CORS for origin: ${origin} (normalized: ${normalizedOrigin})`);
-    
     // Check if the origin is in the allowed list or is a subdomain of the allowed origins
     const isAllowed = allowedOrigins.some(allowedOrigin => {
       try {
@@ -171,19 +167,11 @@ const corsOptions = {
         const requestDomain = normalizedOrigin.split('/')[0];
         
         // Check exact match or subdomain match
-        const isMatch = (
+        return (
           requestDomain === originDomain ||
           (requestDomain.endsWith(`.${originDomain}`) && 
            originDomain.split('.').length <= requestDomain.split('.').length)
         );
-        
-        if (isMatch) {
-          console.log(`CORS origin match: ${requestDomain} matches ${originDomain}`);
-        } else {
-          console.log(`CORS origin no match: ${requestDomain} does not match ${originDomain}`);
-        }
-        
-        return isMatch;
       } catch (e) {
         console.error('Error checking CORS origin:', e);
         return false;
@@ -191,7 +179,6 @@ const corsOptions = {
     });
     
     if (isAllowed) {
-      console.log(`CORS allowed for origin: ${origin}`);
       return callback(null, true);
     } else {
       const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
@@ -205,6 +192,10 @@ const corsOptions = {
   allowedHeaders: [
     'Content-Type',
     'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'X-Access-Token',
+    'X-Refresh-Token',
     'X-Requested-With',
     'X-XSRF-TOKEN',
     'X-Requested-By',
@@ -416,7 +407,7 @@ if (process.env.NODE_ENV === 'production') {
   
   if (clientBuildPath) {
     // Serve static files from the React app
-    app.use(express.static(clientBuildPath));
+    app.use(express.static(clientBuildPath, { index: false }));
     
     // Explicitly serve the favicon and other static assets
     app.get('/favicon.ico', (req, res) => {
@@ -427,8 +418,12 @@ if (process.env.NODE_ENV === 'production') {
       res.sendFile(path.join(clientBuildPath, 'manifest.json'));
     });
     
-    // Handle React routing, return all requests to React app
-    app.get('*', (req, res) => {
+    // Serve index.html for all other GET requests that don't match API routes
+    app.get('*', (req, res, next) => {
+      // Skip API routes
+      if (req.path.startsWith('/api/')) {
+        return next();
+      }
       res.sendFile(path.join(clientBuildPath, 'index.html'));
     });
   } else {
