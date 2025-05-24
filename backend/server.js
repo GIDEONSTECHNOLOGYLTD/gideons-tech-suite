@@ -399,35 +399,42 @@ if (process.env.NODE_ENV === 'production') {
   const possibleBuildPaths = [
     path.join(__dirname, '../frontend/build'),  // For Render
     path.join(__dirname, '../../frontend/build'), // For local development
+    path.join(__dirname, 'client/build'), // Alternative path
     path.join(__dirname, 'frontend/build')     // Alternative path
   ];
   
-  let frontendServed = false;
+  let clientBuildPath = '';
   
-  // Try each path until we find the build files
+  // Find the first existing build path
   for (const buildPath of possibleBuildPaths) {
-    const indexPath = path.join(buildPath, 'index.html');
-    
-    if (fs.existsSync(indexPath)) {
-      console.log('Serving frontend build from:', buildPath);
-      
-      // Serve static files from the React app
-      app.use(express.static(buildPath));
-      
-      // For all other requests, send back React's index.html file
-      app.get('*', (req, res) => {
-        res.sendFile(indexPath);
-      });
-      
-      frontendServed = true;
+    if (fs.existsSync(buildPath)) {
+      clientBuildPath = buildPath;
+      console.log(`Serving static files from: ${clientBuildPath}`);
       break;
     }
   }
   
-  if (!frontendServed) {
-    console.log('Frontend build not found. Only serving API endpoints.');
+  if (clientBuildPath) {
+    // Serve static files from the React app
+    app.use(express.static(clientBuildPath));
     
-    // Handle root route with API info
+    // Explicitly serve the favicon and other static assets
+    app.get('/favicon.ico', (req, res) => {
+      res.sendFile(path.join(clientBuildPath, 'favicon.ico'));
+    });
+    
+    app.get('/manifest.json', (req, res) => {
+      res.sendFile(path.join(clientBuildPath, 'manifest.json'));
+    });
+    
+    // Handle React routing, return all requests to React app
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(clientBuildPath, 'index.html'));
+    });
+  } else {
+    console.warn('Could not find frontend build directory. Make sure to build the frontend.');
+    
+    // Basic API info if frontend not found
     app.get('/', (req, res) => {
       res.status(200).json({
         success: true,
