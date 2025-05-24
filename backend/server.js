@@ -358,14 +358,6 @@ if (process.env.NODE_ENV === 'production') {
       }
     }));
     
-    // Handle SPA routing - serve index.html for all other routes
-    app.get('*', (req, res) => {
-      // Read the index.html file and replace %PUBLIC_URL% with an empty string
-      let html = require('fs').readFileSync(indexHtmlPath, 'utf8');
-      html = html.replace(/%PUBLIC_URL%\//g, '');
-      res.send(html);
-    });
-    
     // Serve test-api.html from public directory
     app.get('/test-api.html', (req, res) => {
       const testApiPath = path.join(frontendPublicPath, 'test-api.html');
@@ -379,7 +371,7 @@ if (process.env.NODE_ENV === 'production') {
       }
     });
     
-    // Handle SPA routing - return index.html for all other routes
+    // Handle SPA routing - serve index.html for all other routes
     app.get('*', (req, res) => {
       if (require('fs').existsSync(indexHtmlPath)) {
         res.sendFile(indexHtmlPath);
@@ -426,12 +418,22 @@ if (process.env.NODE_ENV === 'production') {
 // Error handler middleware (must be after the controllers)
 app.use(errorHandler);
 
+// Start server
 const server = app.listen(
-  PORT,
-  console.log(
-    `Server running in ${process.env.NODE_ENV} mode on port ${PORT}`.yellow.bold
-  )
+  process.env.PORT || 3000, // Use environment variable or default to 3000
+  '0.0.0.0', // Listen on all network interfaces
+  () => {
+    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${process.env.PORT || 3000}`.yellow.bold);
+    console.log(`Server URL: http://0.0.0.0:${process.env.PORT || 3000}`);
+  }
 );
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err, promise) => {
+  console.error(`Error: ${err.message}`.red);
+  // Close server & exit process
+  server.close(() => process.exit(1));
+});
 
 // Set up WebSocket server
 const { broadcast, sendToUser } = setupWebSocket(server);
@@ -440,16 +442,17 @@ const { broadcast, sendToUser } = setupWebSocket(server);
 app.set('broadcast', broadcast);
 app.set('sendToUser', sendToUser);
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err, promise) => {
-  console.log(`Error: ${err.message}`.red);
-  // Close server & exit process
-  server.close(() => process.exit(1));
-});
-
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
-  console.log(`Error: ${err.message}`.red);
-  // Close server & exit process
-  server.close(() => process.exit(1));
+  console.error('UNCAUGHT EXCEPTION! Shutting down...'.red);
+  console.error(err.name, err.message);
+  process.exit(1);
+});
+
+// Handle SIGTERM (for Render)
+process.on('SIGTERM', () => {
+  console.log('SIGTERM RECEIVED. Shutting down gracefully'.yellow);
+  server.close(() => {
+    console.log('Process terminated!');
+  });
 });
