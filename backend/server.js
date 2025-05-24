@@ -346,8 +346,25 @@ if (process.env.NODE_ENV === 'production') {
   if (require('fs').existsSync(frontendBuildPath)) {
     console.log('Serving frontend build from:', frontendBuildPath);
     
-    // Serve static files from build directory
-    app.use(express.static(frontendBuildPath));
+    // Serve static files from build directory with proper caching
+    app.use(express.static(frontendBuildPath, {
+      etag: true,
+      maxAge: '1y',
+      setHeaders: (res, path) => {
+        // Set proper cache control for static assets
+        if (/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/.test(path)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      }
+    }));
+    
+    // Handle SPA routing - serve index.html for all other routes
+    app.get('*', (req, res) => {
+      // Read the index.html file and replace %PUBLIC_URL% with an empty string
+      let html = require('fs').readFileSync(indexHtmlPath, 'utf8');
+      html = html.replace(/%PUBLIC_URL%\//g, '');
+      res.send(html);
+    });
     
     // Serve test-api.html from public directory
     app.get('/test-api.html', (req, res) => {
