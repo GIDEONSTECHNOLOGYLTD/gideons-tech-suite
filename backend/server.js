@@ -40,6 +40,18 @@ const app = express();
 // Connect to database
 connectDB();
 
+// Body parser middleware with increased limits - MUST be before routes
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Cookie parser
+app.use(cookieParser());
+
+// Dev logging middleware
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
+
 // Setup Swagger documentation
 setupSwagger(app);
 
@@ -250,6 +262,9 @@ app.use((req, res, next) => {
       res.header('Access-Control-Allow-Origin', origin);
       res.header('Access-Control-Allow-Credentials', 'true');
       res.header('Vary', 'Origin');
+      next();
+    } else {
+      next(new ErrorResponse('Not allowed by CORS', 403));
     }
   } else {
     // For non-preflight requests, use the standard CORS middleware
@@ -271,11 +286,15 @@ app.use(mongoSanitize());
 // Prevent XSS attacks
 app.use(xss());
 
-// Body parser - must be before route handlers
-app.use(express.json());
-
-// Cookie parser
-app.use(cookieParser());
+// Log all incoming requests for debugging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+  }
+  next();
+});
 
 // File uploading
 app.use(fileupload({
