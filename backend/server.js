@@ -408,7 +408,7 @@ if (process.env.NODE_ENV === 'production') {
   for (const buildPath of possibleBuildPaths) {
     const indexPath = path.join(buildPath, 'index.html');
     
-    if (require('fs').existsSync(indexPath)) {
+    if (fs.existsSync(indexPath)) {
       console.log('Serving frontend build from:', buildPath);
       
       // Serve static files from the React app
@@ -425,7 +425,7 @@ if (process.env.NODE_ENV === 'production') {
   }
   
   if (!frontendServed) {
-    console.log('Frontend build not found in any of the expected locations. Only serving API endpoints.');
+    console.log('Frontend build not found. Only serving API endpoints.');
     
     // Handle root route with API info
     app.get('/', (req, res) => {
