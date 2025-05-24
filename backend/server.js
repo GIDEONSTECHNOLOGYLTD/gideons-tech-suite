@@ -78,8 +78,6 @@ const auditLogs = require('./routes/auditLogRoutes');
 const system = require('./routes/system');
 const settings = require('./routes/settings');
 
-const PORT = process.env.PORT || 5005;
-
 // Set security headers
 const cspDefaults = helmet.contentSecurityPolicy.getDefaultDirectives();
 delete cspDefaults['upgrade-insecure-requests'];
@@ -378,28 +376,37 @@ app.use('/api/health', health);
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
-  // Path to the frontend build directory
-  const frontendBuildPath = path.join(__dirname, '../../frontend/build');
-  const indexHtmlPath = path.join(frontendBuildPath, 'index.html');
+  // Try multiple possible paths for the frontend build
+  const possibleBuildPaths = [
+    path.join(__dirname, '../frontend/build'),  // For Render
+    path.join(__dirname, '../../frontend/build'), // For local development
+    path.join(__dirname, 'frontend/build')     // Alternative path
+  ];
   
-  // Check if frontend build exists
-  if (require('fs').existsSync(frontendBuildPath)) {
-    console.log('Serving frontend build from:', frontendBuildPath);
+  let frontendServed = false;
+  
+  // Try each path until we find the build files
+  for (const buildPath of possibleBuildPaths) {
+    const indexPath = path.join(buildPath, 'index.html');
     
-    // Serve static files from the React app
-    app.use(express.static(frontendBuildPath));
-    
-    // Handle API requests first
-    app.use('/api', (req, res, next) => {
-      next();
-    });
-    
-    // For all other requests, send back React's index.html file
-    app.get('*', (req, res) => {
-      res.sendFile(indexHtmlPath);
-    });
-  } else {
-    console.log('Frontend build not found. Only serving API endpoints.');
+    if (require('fs').existsSync(indexPath)) {
+      console.log('Serving frontend build from:', buildPath);
+      
+      // Serve static files from the React app
+      app.use(express.static(buildPath));
+      
+      // For all other requests, send back React's index.html file
+      app.get('*', (req, res) => {
+        res.sendFile(indexPath);
+      });
+      
+      frontendServed = true;
+      break;
+    }
+  }
+  
+  if (!frontendServed) {
+    console.log('Frontend build not found in any of the expected locations. Only serving API endpoints.');
     
     // Handle root route with API info
     app.get('/', (req, res) => {
@@ -426,14 +433,27 @@ if (process.env.NODE_ENV === 'production') {
 app.use(errorHandler);
 
 // Start server
-const server = app.listen(
-  process.env.PORT || 3000, // Use environment variable or default to 3000
-  '0.0.0.0', // Listen on all network interfaces
-  () => {
-    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${process.env.PORT || 3000}`.yellow.bold);
-    console.log(`Server URL: http://0.0.0.0:${process.env.PORT || 3000}`);
+const HOST = '0.0.0.0';
+const PORT = process.env.PORT || 5005;
+
+const server = app.listen(PORT, HOST, () => {
+  console.log(`\n=== Server Started ===`.green.bold);
+  console.log(`Environment: ${process.env.NODE_ENV}`.cyan);
+  console.log(`Server running on: http://${HOST}:${PORT}`.yellow);
+  console.log(`API Base URL: http://${HOST}:${PORT}/api/v1`.yellow);
+  console.log(`WebSocket: ws://${HOST}:${PORT}`.yellow);
+  console.log(`Press Ctrl+C to stop\n`.dim);
+});
+
+// Handle server errors
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use`.red.bold);
+  } else {
+    console.error('Server error:'.red.bold, error);
   }
-);
+  process.exit(1);
+});
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {

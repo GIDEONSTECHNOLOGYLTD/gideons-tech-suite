@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: gideons-tech-suite
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        fromDatabase:
+          name: mongodb-atlas
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://gideons-tech-suite.onrender.com
+      - key: CORS_WHITELIST
+        value: https://gideons-tech-suite.onrender.com,http://localhost:3000
+      - key: PROJECT_PATH
+        value: backend
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    plan: free
+    region: oregon
+
+# Database configuration
+databases:
+  - name: mongodb-atlas
+    plan: free
+    databaseName: gideons_tech_suite
+    # Note: IP whitelisting should be configured in your MongoDB Atlas dashboard
