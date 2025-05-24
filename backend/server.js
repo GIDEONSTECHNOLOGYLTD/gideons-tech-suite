@@ -22,10 +22,14 @@ const auditLogger = require('./middleware/auditLogger');
 
 // Load env vars based on environment
 const envFile = process.env.NODE_ENV === 'production' 
-  ? './config/config.prod.env' 
+  ? './config/production.env' 
   : './config/config.env';
 
 dotenv.config({ path: envFile });
+
+console.log(`Environment: ${process.env.NODE_ENV}`);
+console.log(`MongoDB URI: ${process.env.MONGODB_URI ? 'Set' : 'Not set'}`);
+console.log(`JWT Secret: ${process.env.JWT_SECRET ? 'Set' : 'Not set'}`);
 
 // Log environment for debugging
 console.log(`Running in ${process.env.NODE_ENV} mode`.yellow.bold);
