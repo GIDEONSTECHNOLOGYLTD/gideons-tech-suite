@@ -22,6 +22,16 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Log files
+*.log
+logs/
+backend/logs/
+!backend/logs/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+
 # IDE
 .idea
 .vscode

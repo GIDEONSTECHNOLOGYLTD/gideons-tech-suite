@@ -56,46 +56,20 @@ console.log(`JWT Secret: ${process.env.JWT_SECRET ? 'Set' : 'Not set'}`.grey);
 // Log environment for debugging
 console.log(`Running in ${process.env.NODE_ENV} mode`.yellow.bold);
 
-// Initialize Express app
-const app = express();
+const app = require('./app');
 
 // Connect to database
 connectDB();
 
-// Body parser middleware with increased limits - MUST be before routes
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+const http = require('http');
+const server = http.createServer(app);
 
-// Middleware
-app.use(cookieParser());
-
-// Request logging
-if (process.env.NODE_ENV !== 'test') {
-  app.use(requestLogger);
-}
-
-// Dev logging middleware
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-}
-
-// Setup Swagger documentation
-setupSwagger(app);
-
-// Route files
-const auth = require('./routes/auth');
-const projects = require('./routes/projects');
-const tasks = require('./routes/tasks');
-const users = require('./routes/users');
-const documents = require('./routes/documents');
-const folders = require('./routes/folders');
-const search = require('./routes/search');
-const health = require('./routes/health');
-const dashboard = require('./routes/dashboard');
-const admin = require('./routes/admin');
-const auditLogs = require('./routes/auditLogRoutes');
-const system = require('./routes/system');
-const settings = require('./routes/settings');
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err, promise) => {
+  console.log(`Error: ${err.message}`.red);
+  // Close server & exit process
+  server.close(() => process.exit(1));
+});
 
 // Set security headers
 const cspDefaults = helmet.contentSecurityPolicy.getDefaultDirectives();
@@ -487,35 +461,68 @@ if (process.env.NODE_ENV === 'production') {
 // Error handler middleware (must be after the controllers)
 app.use(errorHandler);
 
-// Start server
-const HOST = '0.0.0.0';
-const PORT = process.env.PORT || 5005;
-
-const server = app.listen(PORT, HOST, () => {
-  console.log(`\n=== Server Started ===`.green.bold);
-  console.log(`Environment: ${process.env.NODE_ENV}`.cyan);
-  console.log(`Server running on: http://${HOST}:${PORT}`.yellow);
-  console.log(`API Base URL: http://${HOST}:${PORT}/api/v1`.yellow);
-  console.log(`WebSocket: ws://${HOST}:${PORT}`.yellow);
-  console.log(`Press Ctrl+C to stop\n`.dim);
-});
-
-// Handle server errors
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use`.red.bold);
-  } else {
-    console.error('Server error:'.red.bold, error);
+const onError = (error) => {
+  if (error.syscall !== 'listen') {
+    throw error;
   }
-  process.exit(1);
-});
 
-// Handle unhandled promise rejections (logging is now handled in monitoring.js)
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', { promise, reason });
-  // Close server & exit process
-  server.close(() => process.exit(1));
-});
+  const bind = typeof port === 'string' ? 'Pipe ' + port : 'Port ' + port;
+
+  // Handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+};
+
+// Start the server if this file is run directly (not when imported)
+if (require.main === module) {
+  const HOST = '0.0.0.0';
+  const PORT = process.env.PORT || 5005;
+  
+  // Load env vars
+  const result = dotenv.config({ path: './config/config.env' });
+
+  if (result.error) {
+    console.error('Error loading .env file'.red.bold);
+    process.exit(1);
+  }
+
+  // Create HTTP server
+  const server = http.createServer(app);
+
+  // Set up WebSocket server
+  setupWebSocket(server);
+
+  // Error handler
+  server.on('error', onError);
+  
+  // Listening handler
+  server.on('listening', () => {
+    const addr = server.address();
+    const bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
+    console.log(`\n=== Server Started ===`.green.bold);
+    console.log(`Environment: ${process.env.NODE_ENV}`.cyan);
+    console.log(`Server running on: http://${HOST}:${PORT}`.yellow);
+    console.log(`API Base URL: http://${HOST}:${PORT}/api/v1`.yellow);
+    console.log(`WebSocket: ws://${HOST}:${PORT}`.yellow);
+    console.log(`Press Ctrl+C to stop\n`.dim);
+  });
+
+  // Start listening
+  server.listen(PORT, HOST);
+}
+
+// Export the server for testing
+module.exports = server;
 
 // Set up WebSocket server
 const { broadcast, sendToUser } = setupWebSocket(server);
