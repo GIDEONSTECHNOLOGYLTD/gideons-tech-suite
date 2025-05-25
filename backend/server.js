@@ -29,30 +29,46 @@ if (!fs.existsSync(logDir)) {
 }
 
 // Load environment variables
-const envFiles = [
-  process.env.ENV_FILE, // Allow override via ENV_FILE
-  `./config/config.${process.env.NODE_ENV || 'development'}.env`,
-  './config/config.env',
-  '.env'
-];
-
-let envLoaded = false;
-for (const envFile of envFiles) {
-  if (envFile) {
-    try {
-      if (fs.existsSync(envFile)) {
-        dotenv.config({ path: envFile });
-        console.log(`Loaded environment variables from ${envFile}`.green);
-        envLoaded = true;
-        break;
+const loadEnvVars = () => {
+  // In production, we expect environment variables to be set directly
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Running in production mode'.green);
+    // In production, we'll use the environment variables directly
+    // No need to load from .env file
+    return true;
+  }
+  
+  // In development, try to load from .env file
+  const envFiles = [
+    process.env.ENV_FILE, // Allow override via ENV_FILE
+    `./config/config.${process.env.NODE_ENV || 'development'}.env`,
+    './config/config.env',
+    '.env',
+    '../.env'
+  ];
+  
+  for (const envFile of envFiles) {
+    if (envFile) {
+      try {
+        const fullPath = path.isAbsolute(envFile) ? envFile : path.join(__dirname, envFile);
+        if (fs.existsSync(fullPath)) {
+          dotenv.config({ path: fullPath });
+          console.log(`Loaded environment variables from ${fullPath}`.green);
+          return true;
+        }
+      } catch (err) {
+        console.warn(`Warning: Could not load environment file at ${envFile}: ${err.message}`.yellow);
       }
-    } catch (err) {
-      console.warn(`Warning: Could not load environment file at ${envFile}`.yellow);
     }
   }
-}
+  
+  console.warn('Warning: No environment files were loaded'.yellow);
+  return false;
+};
 
-// In production, it's expected to use system environment variables
+// Load environment variables
+const envLoaded = loadEnvVars();
+
 if (!envLoaded && process.env.NODE_ENV !== 'production') {
   console.warn('No environment file found, using system environment variables'.yellow);
 }
@@ -580,28 +596,30 @@ if (require.main === module) {
     'FRONTEND_URL'
   ];
 
-  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-  if (missingVars.length > 0) {
-    const errorMsg = `Error: The following required environment variables are missing: ${missingVars.join(', ')}`;
+  // Set default values for required variables
+  if (!process.env.JWT_SECRET) {
+    console.warn('Warning: JWT_SECRET not set. Using a default value. This is NOT secure for production!'.yellow);
+    process.env.JWT_SECRET = 'insecure-default-secret-change-in-production';
+  }
+
+  if (!process.env.FRONTEND_URL) {
+    console.warn('Warning: FRONTEND_URL not set. Using default value.'.yellow);
+    process.env.FRONTEND_URL = 'https://gideons-tech-suite.onrender.com';
+  }
+
+  // Only check for MONGODB_URI as it's critical
+  if (!process.env.MONGODB_URI) {
+    const errorMsg = 'Error: MONGODB_URI is required but not set';
+    console.error(errorMsg.red);
     
-    if (process.env.NODE_ENV === 'production') {
-      // In production, log the error but don't exit to allow for dynamic configuration
-      console.error(errorMsg);
-      console.warn('Warning: Server is starting with missing environment variables. This may cause issues.');
-      
-      // Set default values for required variables to prevent crashes
-      if (!process.env.JWT_SECRET) {
-        console.warn('Warning: JWT_SECRET not set. Using a default value. This is NOT secure for production!');
-        process.env.JWT_SECRET = 'insecure-default-secret-change-in-production';
-      }
-      
-      if (!process.env.FRONTEND_URL) {
-        console.warn('Warning: FRONTEND_URL not set. Using default value.');
-        process.env.FRONTEND_URL = 'https://gideons-tech-suite.onrender.com';
-      }
+    // In production, try to use Render's internal MongoDB if available
+    if (process.env.NODE_ENV === 'production' && process.env.MONGODB_INTERNAL_URI) {
+      console.warn('Using MONGODB_INTERNAL_URI from Render environment'.yellow);
+      process.env.MONGODB_URI = process.env.MONGODB_INTERNAL_URI;
+    } else if (process.env.NODE_ENV === 'production') {
+      console.warn('Warning: Starting without MongoDB connection. Some features may not work.'.yellow);
     } else {
-      // In development, exit on missing variables
-      console.error(errorMsg);
+      console.error('Fatal: MONGODB_URI is required in development'.red);
       process.exit(1);
     }
   }

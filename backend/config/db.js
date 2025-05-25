@@ -2,24 +2,21 @@ const mongoose = require('mongoose');
 const colors = require('colors');
 
 const connectDB = async () => {
+  // Don't attempt to connect if no MONGODB_URI is set
+  if (!process.env.MONGODB_URI) {
+    console.warn('MongoDB: No connection string provided. Running in limited mode.'.yellow);
+    return null;
+  }
+
   try {
-    // Ensure we're using the test database in test environment
-    const mongoUri = process.env.NODE_ENV === 'test' 
-      ? 'mongodb://localhost:27017/gideons-tech-suite-test'
-      : process.env.MONGODB_URI;
-      
-    if (!mongoUri) {
-      throw new Error('MongoDB URI is not defined in environment variables');
-    }
-    
-    console.log(`Connecting to MongoDB...`);
-    console.log(`Environment: ${process.env.NODE_ENV}`);
-    
     const options = {
-      serverSelectionTimeoutMS: 10000, // Increased from 5s to 10s
-      socketTimeoutMS: 45000,
-      family: 4,
-      maxPoolSize: 10,
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 10000, // 10 seconds timeout
+      socketTimeoutMS: 45000, // 45 seconds before timing out
+      connectTimeoutMS: 10000, // 10 seconds to connect
+      family: 4, // Use IPv4, skip trying IPv6
+      maxPoolSize: 10, // Maximum number of connections in the connection pool
       retryWrites: true,
       w: 'majority',
       serverApi: {
