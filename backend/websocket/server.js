@@ -88,7 +88,21 @@ const setupWebSocket = (server) => {
     ws.on('close', (code, reason) => {
       console.log(`Client disconnected: ${userId || 'unauthorized'}, code: ${code}, reason: ${reason}`);
       if (userId) {
-        clients.delete(userId);
+        if (clients.get(userId) === ws) {
+          clients.delete(userId);
+        }
+      }
+    });
+    
+    // Handle connection errors
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+      try {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(1006, 'Internal server error');
+        }
+      } catch (err) {
+        console.error('Error closing WebSocket after error:', err);
       }
     });
 
