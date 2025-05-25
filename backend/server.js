@@ -38,36 +38,54 @@ const envFiles = [
 
 let envLoaded = false;
 for (const envFile of envFiles) {
-  if (envFile && fs.existsSync(envFile)) {
-    dotenv.config({ path: envFile });
-    console.log(`Loaded environment variables from ${envFile}`.green);
-    envLoaded = true;
-    break;
+  if (envFile) {
+    try {
+      if (fs.existsSync(envFile)) {
+        dotenv.config({ path: envFile });
+        console.log(`Loaded environment variables from ${envFile}`.green);
+        envLoaded = true;
+        break;
+      }
+    } catch (err) {
+      console.warn(`Warning: Could not load environment file at ${envFile}`.yellow);
+    }
   }
 }
 
-if (!envLoaded) {
+// In production, it's expected to use system environment variables
+if (!envLoaded && process.env.NODE_ENV !== 'production') {
   console.warn('No environment file found, using system environment variables'.yellow);
 }
 
 // Set default NODE_ENV to 'development' if not set
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
 
+// Log environment info for debugging
+console.log('Environment:', process.env.NODE_ENV.green.bold);
+console.log('Server running in', process.env.NODE_ENV === 'production' ? 'production'.green.bold : 'development'.yellow.bold, 'mode');
+
+// Check for required environment variables
+const requiredVars = ['MONGODB_URI', 'JWT_SECRET'];
+const missingRequiredVars = requiredVars.filter(varName => !process.env[varName]);
+
+if (missingRequiredVars.length > 0) {
+  console.error('Error: The following required environment variables are missing:'.red.bold);
+  missingRequiredVars.forEach(varName => console.error(`- ${varName}`.red));
+  process.exit(1);
+}
+
+// Log which required variables are set (without sensitive values)
+console.log('MongoDB connected:', process.env.MONGODB_URI ? 'Yes' : 'No'.red);
+console.log('JWT Secret:', process.env.JWT_SECRET ? 'Set' : 'Not set'.red);
+
+// Log other important config
+console.log('Running in', process.env.NODE_ENV, 'mode');
+
 // Log environment info
 logger.info(`Starting ${process.env.npm_package_name} v${process.env.npm_package_version}`);
 logger.info(`Environment: ${process.env.NODE_ENV}`);
 logger.info(`Node version: ${process.version}`);
 logger.info(`Platform: ${process.platform} ${process.arch}`);
-
-// Validate required environment variables
-const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
-const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
-if (missingVars.length > 0) {
-  console.error('Error: The following required environment variables are missing:'.red.bold);
-  missingVars.forEach(varName => console.error(`- ${varName}`.red));
-  process.exit(1);
-}
 
 // Log environment info (without sensitive data)
 console.log(`Environment: ${process.env.NODE_ENV}`.cyan.bold);
