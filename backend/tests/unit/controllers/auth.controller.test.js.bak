@@ -1,0 +1,435 @@
+// Mock the asyncHandler
+jest.mock('../../../middleware/async', () => fn => (req, res, next) => {
+  return Promise.resolve(fn(req, res, next)).catch(next);
+});
+
+// Mock the ErrorResponse
+const mockErrorResponse = jest.fn((message, statusCode) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+});
+jest.mock('../../../utils/errorResponse', () => mockErrorResponse);
+
+// Mock bcrypt
+jest.mock('bcryptjs', () => ({
+  hash: jest.fn().mockResolvedValue('hashedpassword123'),
+  compare: jest.fn().mockResolvedValue(true)
+}));
+
+// Mock jsonwebtoken
+jest.mock('jsonwebtoken', () => ({
+  sign: jest.fn().mockReturnValue('mocked-jwt-token')
+}));
+
+// Import mongoose after setting up mocks
+const mongoose = require('mongoose');
+
+// Create a mock User model
+function MockUser(data) {
+  if (data) {
+    Object.assign(this, data);
+  }
+  
+  // Default values
+  this._id = this._id || '507f1f77bcf86cd799439011';
+  this.name = this.name || 'Test User';
+  this.email = this.email || 'test@example.com';
+  this.role = this.role || 'user';
+  this.isActive = this.isActive !== undefined ? this.isActive : true;
+  this.password = this.password || 'hashedpassword123';
+  
+  this.save = jest.fn().mockImplementation(function() {
+    return Promise.resolve(this);
+  });
+  
+  this.matchPassword = jest.fn().mockResolvedValue(true);
+  this.getSignedJwtToken = jest.fn().mockReturnValue('mocked-jwt-token');
+  
+  this.toObject = jest.fn().mockImplementation(() => ({
+    _id: this._id.toString(),
+    id: this._id.toString(),
+    name: this.name,
+    email: this.email,
+    role: this.role,
+    isActive: this.isActive
+  }));
+  
+  return this;
+}
+
+// Add static methods
+MockUser.findOne = jest.fn().mockImplementation((query) => {
+  const testUsers = {
+    'test@example.com': new MockUser({
+      _id: '507f1f77bcf86cd799439011',
+      email: 'test@example.com',
+      matchPassword: jest.fn().mockImplementation((password) => 
+        Promise.resolve(password === 'Test123!')
+      )
+    }),
+    'existing@example.com': new MockUser({
+      _id: 'existinguser123',
+      email: 'existing@example.com',
+      name: 'Existing User'
+    }),
+    'newuser@example.com': new MockUser({
+      _id: 'newuserid123',
+      email: 'newuser@example.com',
+      name: 'New User'
+    })
+  };
+
+  let user = null;
+  let emailToCheck = query.email;
+  
+  if (typeof emailToCheck === 'object' && emailToCheck.$regex) {
+    const regex = new RegExp(emailToCheck.$regex, emailToCheck.$options || '');
+    user = Object.values(testUsers).find(u => regex.test(u.email));
+  } else {
+    user = testUsers[emailToCheck];
+  }
+  
+  const mockQuery = {
+    select: jest.fn().mockImplementation((field) => {
+      if (field === '+password') {
+        return {
+          exec: jest.fn().mockResolvedValue(user)
+        };
+      }
+      return mockQuery;
+    }),
+    exec: jest.fn().mockResolvedValue(user)
+  };
+  
+  return mockQuery;
+});
+
+// Mock create method
+MockUser.create = jest.fn().mockImplementation((userData) => {
+  const newUser = new MockUser({
+    ...userData,
+    _id: 'newuserid123',
+    isActive: true,
+    save: jest.fn().mockResolvedValue({
+      ...userData,
+      _id: 'newuserid123',
+      isActive: true,
+      getSignedJwtToken: jest.fn().mockReturnValue('mocked-jwt-token')
+    })
+  });
+  return Promise.resolve(newUser);
+});
+
+// Mock findById
+MockUser.findById = jest.fn().mockImplementation((id) => {
+  const users = {
+    '507f1f77bcf86cd799439011': new MockUser({
+      _id: '507f1f77bcf86cd799439011',
+      email: 'test@example.com',
+      name: 'Test User'
+    })
+  };
+  
+  return {
+    select: jest.fn().mockImplementation((fields) => ({
+      exec: jest.fn().mockResolvedValue(users[id] || null)
+    }))
+  };
+});
+
+// Mock the model
+const MockModel = {
+  findOne: MockUser.findOne,
+  create: MockUser.create,
+  findById: MockUser.findById
+};
+
+// Mock the mongoose model
+mongoose.model = jest.fn().mockReturnValue(MockModel);
+
+// Import the auth controller after setting up mocks
+const authController = require('../../../controllers/auth');
+
+describe('Auth Controller', () => {
+  let req, res, next;
+  
+  beforeEach(() => {
+    // Reset all mocks before each test
+    jest.clearAllMocks();
+    
+    // Create mock request, response, and next function
+    req = {
+      body: {},
+      user: { id: '507f1f77bcf86cd799439011' }
+    };
+    
+    res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+      cookie: jest.fn().mockReturnThis()
+    };
+    
+    next = jest.fn();
+  });
+  
+  describe('register', () => {
+    it('should register a new user with valid data and default to user role', async () => {
+      const req = {
+        body: {
+          name: 'New User',
+          email: 'newuser@example.com',
+          password: 'Test123!',
+          role: 'admin' // This should be ignored
+        }
+      };
+      
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        cookie: jest.fn(),
+        json: jest.fn()
+      };
+      
+      const next = jest.fn();
+      
+      // Mock User.findOne to return null (user doesn't exist)
+      MockUser.findOne.mockImplementationOnce(() => ({
+        exec: jest.fn().mockResolvedValue(null)
+      }));
+      
+      // Mock User.create to return a new user
+      const newUser = {
+        _id: '507f1f77bcf86cd799439012',
+        name: 'New User',
+        email: 'newuser@example.com',
+        role: 'user',
+        getSignedJwtToken: jest.fn().mockReturnValue('testToken123')
+      };
+      MockUser.create.mockResolvedValueOnce(newUser);
+      
+      await authController.register(req, res, next);
+      
+      expect(MockUser.findOne).toHaveBeenCalledWith({
+        email: 'newuser@example.com'
+      });
+      
+      expect(MockUser.create).toHaveBeenCalledWith({
+        name: 'New User',
+        email: 'newuser@example.com',
+        password: 'Test123!',
+        role: 'user' // Should be forced to 'user' role
+      });
+      
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.cookie).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        token: 'testToken123'
+      });
+    });
+    
+    it('should prevent role assignment during registration', async () => {
+      const req = {
+        body: {
+          name: 'New User',
+          email: 'newuser@example.com',
+          password: 'Test123!',
+          role: 'admin' // This should be rejected
+        }
+      };
+      
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn()
+      };
+      
+      const next = jest.fn();
+      
+      await authController.register(req, res, next);
+      
+      expect(next).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Role assignment is not allowed during registration',
+          statusCode: 403
+        })
+      );
+      
+      // Should not call create when role is provided
+      expect(MockUser.create).not.toHaveBeenCalled();
+    });
+  });
+  
+  describe('login', () => {
+    it('should login with valid credentials', async () => {
+      // Mock user data
+      const mockUser = {
+        _id: '507f1f77bcf86cd799439011',
+        email: 'test@example.com',
+        password: 'hashedpassword',
+        role: 'user',
+        isActive: true,
+        matchPassword: jest.fn().mockResolvedValue(true),
+        getSignedJwtToken: jest.fn().mockReturnValue('testToken123')
+      };
+      
+      // Mock request and response
+      const req = {
+        body: {
+          email: 'test@example.com',
+          password: 'Test123!'
+        }
+      };
+      
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        cookie: jest.fn(),
+        json: jest.fn()
+      };
+      
+      const next = jest.fn();
+      
+      // Mock User.findOne to return the user
+      MockUser.findOne.mockImplementationOnce((query) => {
+        expect(query).toEqual({
+          email: { $regex: /^test@example.com$/i }
+        });
+        return Promise.resolve({
+          select: jest.fn().mockResolvedValue(mockUser)
+        });
+      });
+      
+      await authController.login(req, res, next);
+      
+      expect(mockUser.matchPassword).toHaveBeenCalledWith('Test123!');
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.cookie).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        token: 'testToken123'
+      });
+    });
+    
+    it('should not login with invalid password', async () => {
+      // Mock user data
+      const mockUser = {
+        _id: '507f1f77bcf86cd799439011',
+        email: 'test@example.com',
+        password: 'hashedpassword',
+        role: 'user',
+        isActive: true,
+        matchPassword: jest.fn().mockResolvedValue(false)
+      };
+      
+      // Mock request and response
+      const req = {
+        body: {
+          email: 'test@example.com',
+          password: 'wrongpassword'
+        }
+      };
+      
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn()
+      };
+      
+      const next = jest.fn();
+      
+      // Mock User.findOne to return the user
+      MockUser.findOne.mockImplementationOnce((query) => {
+        expect(query).toEqual({
+          email: { $regex: /^test@example.com$/i }
+        });
+        return Promise.resolve({
+          select: jest.fn().mockResolvedValue(mockUser)
+        });
+      });
+      
+      await authController.login(req, res, next);
+      
+      expect(mockUser.matchPassword).toHaveBeenCalledWith('wrongpassword');
+      expect(next).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'Invalid credentials',
+          statusCode: 401
+        })
+      );
+      expect(res.json).not.toHaveBeenCalled();
+    });
+  });
+  
+  describe('getMe', () => {
+    it('should return current user data', async () => {
+      const req = {
+        user: {
+          id: '507f1f77bcf86cd799439011'
+        }
+      };
+      
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn()
+      };
+      
+      const next = jest.fn();
+      
+      // Mock User.findById to return a user
+      const mockUser = {
+        _id: '507f1f77bcf86cd799439011',
+        name: 'Test User',
+        email: 'test@example.com',
+        role: 'user',
+        isActive: true
+      };
+      
+      MockUser.findById.mockResolvedValueOnce(mockUser);
+      
+      await authController.getMe(req, res, next);
+      
+      expect(MockUser.findById).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+      
+      // Verify response format
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        data: mockUser
+      });
+      
+      // Should not call next() with error
+      expect(next).not.toHaveBeenCalled();
+    });
+    
+    it('should handle user not found in getMe', async () => {
+      const req = {
+        user: {
+          id: '507f1f77bcf86cd799439011'
+        }
+      };
+      
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn()
+      };
+      
+      const next = jest.fn();
+      
+      // Mock User.findById to return null (user not found)
+      MockUser.findById.mockImplementationOnce(() => ({
+        exec: jest.fn().mockResolvedValue(null)
+      }));
+      
+      await authController.getMe(req, res, next);
+      
+      // Verify next was called with an error
+      expect(next).toHaveBeenCalledWith(expect.any(Error));
+      
+      // Get the error passed to next()
+      const error = next.mock.calls[0][0];
+      expect(error).toBeInstanceOf(Error);
+      expect(error.statusCode).toBe(404);
+      
+      // Should not call res.json()
+      expect(res.json).not.toHaveBeenCalled();
+    });
+  });
+});

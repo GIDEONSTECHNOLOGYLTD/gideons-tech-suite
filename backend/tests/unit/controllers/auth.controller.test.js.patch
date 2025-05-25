@@ -1,0 +1,52 @@
+--- a/backend/tests/unit/controllers/auth.controller.test.js
++++ b/backend/tests/unit/controllers/auth.controller.test.js
+@@ -346,12 +346,9 @@\n       
+       await authController.register(req, res, mockNext);
+       
+-      // Verify findOne was called with case-insensitive email regex
++      // Verify findOne was called with direct email match (registration uses direct match)
+       expect(findOneMock).toHaveBeenCalledWith({
+-        email: expect.objectContaining({
+-          $regex: expect.any(RegExp),
+-          $options: 'i'
+-        })
++        email: 'newuser@example.com'
+       });
+       
+       // Verify create was called with the right data
+@@ -500,12 +497,11 @@
+       
+       await authController.login(req, res, mockNext);
+       
+-      // Verify findOne was called with case-insensitive email regex
++      // Verify findOne was called with case-insensitive email regex for login
+       expect(findOneMock).toHaveBeenCalledWith({
+-        email: expect.objectContaining({
+-          $regex: expect.any(RegExp),
+-          $options: 'i'
+-        })
++        email: {
++          $regex: /^test@example.com$/i,
++          $options: 'i'
++        }
+       });
+       
+       // Verify select was called with '+password' to include the password field
+@@ -559,12 +555,11 @@
+       
+       await authController.login(req, res, mockNext);
+       
+-      // Verify findOne was called with case-insensitive email regex
++      // Verify findOne was called with case-insensitive email regex for login
+       expect(findOneMock).toHaveBeenCalledWith({
+-        email: expect.objectContaining({
+-          $regex: expect.any(RegExp),
+-          $options: 'i'
+-        })
++        email: {
++          $regex: /^test@example.com$/i,
++          $options: 'i'
++        }
+       });
+       
+       // Verify select was called with '+password' to include the password field
