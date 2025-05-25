@@ -46,6 +46,28 @@ app.use(express.json());
 // Cookie parser
 app.use(cookieParser());
 
+// Set security headers with CSP
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'" // Required for some libraries like Material-UI
+      ],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", process.env.REACT_APP_API_URL],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false // Required for WebSockets
+}));
+
 // File uploading
 app.use(fileupload());
 
