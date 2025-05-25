@@ -525,17 +525,57 @@ const onError = (error) => {
 
 // Start the server if this file is run directly (not when imported)
 if (require.main === module) {
+  // Load environment variables
+  const loadEnvVars = () => {
+    // In production, we expect environment variables to be set directly
+    if (process.env.NODE_ENV === 'production') {
+      console.log('Running in production mode');
+      return;
+    }
+    
+    // In development, try to load from .env file
+    try {
+      const dotenv = require('dotenv');
+      const result = dotenv.config({ path: path.join(__dirname, '.env') });
+      
+      if (result.error) {
+        console.warn('Warning: No .env file found or error loading .env file');
+        console.warn('Using system environment variables or defaults');
+      } else {
+        console.log('Environment variables loaded from .env file');
+      }
+    } catch (error) {
+      console.warn('Warning: Error loading .env file:', error.message);
+    }
+  };
+
+  // Load environment variables
+  loadEnvVars();
+
+  // Validate required environment variables
+  const requiredEnvVars = [
+    'MONGODB_URI',
+    'JWT_SECRET',
+    'FRONTEND_URL'
+  ];
+
+  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+  if (missingVars.length > 0) {
+    console.error('Error: The following required environment variables are missing:');
+    missingVars.forEach(varName => console.error(`- ${varName}`));
+    
+    if (process.env.NODE_ENV === 'production') {
+      console.error('Fatal: Missing required environment variables in production');
+      process.exit(1);
+    } else {
+      console.warn('Warning: Running with missing environment variables in development');
+    }
+  }
+
   const HOST = '0.0.0.0';
   const PORT = process.env.PORT || 5005;
   
-  // Load env vars
-  const result = dotenv.config({ path: './config/config.env' });
-
-  if (result.error) {
-    console.error('Error loading .env file'.red.bold);
-    process.exit(1);
-  }
-
   // Create HTTP server
   const server = http.createServer(app);
 
