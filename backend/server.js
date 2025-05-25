@@ -530,19 +530,40 @@ if (require.main === module) {
     // In production, we expect environment variables to be set directly
     if (process.env.NODE_ENV === 'production') {
       console.log('Running in production mode');
+      // In production, we'll use the environment variables directly
+      // No need to load from .env file
       return;
     }
     
     // In development, try to load from .env file
     try {
       const dotenv = require('dotenv');
-      const result = dotenv.config({ path: path.join(__dirname, '.env') });
+      // Try multiple possible .env file locations
+      const envFiles = [
+        path.join(__dirname, '../.env'),
+        path.join(__dirname, '.env'),
+        path.join(process.cwd(), '.env')
+      ];
       
-      if (result.error) {
-        console.warn('Warning: No .env file found or error loading .env file');
+      let loaded = false;
+      for (const envFile of envFiles) {
+        try {
+          if (fs.existsSync(envFile)) {
+            const result = dotenv.config({ path: envFile });
+            if (!result.error) {
+              console.log(`Environment variables loaded from ${envFile}`);
+              loaded = true;
+              break;
+            }
+          }
+        } catch (err) {
+          console.warn(`Warning: Error loading ${envFile}:`, err.message);
+        }
+      }
+      
+      if (!loaded) {
+        console.warn('Warning: No .env file found or error loading .env files');
         console.warn('Using system environment variables or defaults');
-      } else {
-        console.log('Environment variables loaded from .env file');
       }
     } catch (error) {
       console.warn('Warning: Error loading .env file:', error.message);
@@ -560,16 +581,28 @@ if (require.main === module) {
   ];
 
   const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
-
   if (missingVars.length > 0) {
-    console.error('Error: The following required environment variables are missing:');
-    missingVars.forEach(varName => console.error(`- ${varName}`));
+    const errorMsg = `Error: The following required environment variables are missing: ${missingVars.join(', ')}`;
     
     if (process.env.NODE_ENV === 'production') {
-      console.error('Fatal: Missing required environment variables in production');
-      process.exit(1);
+      // In production, log the error but don't exit to allow for dynamic configuration
+      console.error(errorMsg);
+      console.warn('Warning: Server is starting with missing environment variables. This may cause issues.');
+      
+      // Set default values for required variables to prevent crashes
+      if (!process.env.JWT_SECRET) {
+        console.warn('Warning: JWT_SECRET not set. Using a default value. This is NOT secure for production!');
+        process.env.JWT_SECRET = 'insecure-default-secret-change-in-production';
+      }
+      
+      if (!process.env.FRONTEND_URL) {
+        console.warn('Warning: FRONTEND_URL not set. Using default value.');
+        process.env.FRONTEND_URL = 'https://gideons-tech-suite.onrender.com';
+      }
     } else {
-      console.warn('Warning: Running with missing environment variables in development');
+      // In development, exit on missing variables
+      console.error(errorMsg);
+      process.exit(1);
     }
   }
 
