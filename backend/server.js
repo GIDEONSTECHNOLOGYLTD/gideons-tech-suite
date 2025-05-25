@@ -29,7 +29,29 @@ if (!fs.existsSync(logDir)) {
 }
 
 // Load environment variables
-dotenv.config({ path: './config/config.env' });
+const envFiles = [
+  process.env.ENV_FILE, // Allow override via ENV_FILE
+  `./config/config.${process.env.NODE_ENV || 'development'}.env`,
+  './config/config.env',
+  '.env'
+];
+
+let envLoaded = false;
+for (const envFile of envFiles) {
+  if (envFile && fs.existsSync(envFile)) {
+    dotenv.config({ path: envFile });
+    console.log(`Loaded environment variables from ${envFile}`.green);
+    envLoaded = true;
+    break;
+  }
+}
+
+if (!envLoaded) {
+  console.warn('No environment file found, using system environment variables'.yellow);
+}
+
+// Set default NODE_ENV to 'development' if not set
+process.env.NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Log environment info
 logger.info(`Starting ${process.env.npm_package_name} v${process.env.npm_package_version}`);
