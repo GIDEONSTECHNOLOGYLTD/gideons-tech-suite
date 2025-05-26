@@ -38,7 +38,7 @@ const mongoSanitize = require('express-mongo-sanitize');
 const cookieParser = require('cookie-parser');
 const fileupload = require('express-fileupload');
 const { errorHandler, notFound } = require('./middleware/error');
-const connectDB = require('./config/db');
+const { connectDB, testMongoConnection } = require('./config/db');
 const setupWebSocket = require('./websocket/server');
 const { apiLimiter, authLimiter, adminLimiter } = require('./middleware/rateLimiter');
 const setupSwagger = require('./config/swagger');
@@ -170,8 +170,27 @@ console.log(`Running in ${process.env.NODE_ENV} mode`.yellow.bold);
 
 const app = require('./app');
 
-// Connect to database
-connectDB();
+// Connect to database with error handling
+(async () => {
+  try {
+    await connectDB();
+    
+    // Test the connection
+    const result = await testMongoConnection(process.env.MONGODB_URI);
+    if (result.success) {
+      console.log('Successfully connected to MongoDB!'.green);
+      console.log('Available databases:'.green, result.databases.join(', '));
+    } else {
+      console.error('Failed to connect to MongoDB:'.red, result.error);
+      console.error('Error name:'.red, result.name);
+      if (result.code) console.error('Error code:'.red, result.code);
+      process.exit(1);
+    }
+  } catch (error) {
+    console.error('Error connecting to MongoDB:'.red, error.message);
+    process.exit(1);
+  }
+})();
 
 const http = require('http');
 const server = http.createServer(app);

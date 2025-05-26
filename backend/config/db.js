@@ -68,4 +68,35 @@ const connectDB = async () => {
   }
 };
 
-module.exports = connectDB;
+// Helper function to test MongoDB connection
+const testMongoConnection = async (uri) => {
+  try {
+    const { MongoClient } = require('mongodb');
+    const client = new MongoClient(uri, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 10000,
+    });
+    
+    await client.connect();
+    const adminDb = client.db().admin();
+    const dbs = await adminDb.listDatabases();
+    await client.close();
+    
+    return {
+      success: true,
+      databases: dbs.databases.map(db => db.name)
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+      name: error.name,
+      code: error.code
+    };
+  }
+};
+
+module.exports = {
+  connectDB,
+  testMongoConnection
+};
