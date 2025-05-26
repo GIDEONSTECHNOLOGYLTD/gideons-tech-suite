@@ -1,8 +1,14 @@
 // Only require dotenv in non-production environments
 let dotenv;
 if (process.env.NODE_ENV !== 'production') {
-  dotenv = require('dotenv');
-  dotenv.config();
+  try {
+    dotenv = require('dotenv');
+    dotenv.config();
+  } catch (err) {
+    console.warn('Warning: Could not load dotenv'.yellow, err.message);
+  }
+} else {
+  console.log('Running in production mode - skipping .env loading'.green);
 }
 
 const express = require('express');
@@ -37,7 +43,7 @@ if (!fs.existsSync(logDir)) {
 const loadEnvVars = () => {
   // In production, we only check for required variables
   if (process.env.NODE_ENV === 'production') {
-    console.log('Running in production mode'.green);
+    console.log('Running in production mode - checking required variables'.green);
     
     // Check for required environment variables in production
     const requiredVars = ['MONGODB_URI', 'JWT_SECRET', 'FRONTEND_URL'];
@@ -49,7 +55,7 @@ const loadEnvVars = () => {
       return false;
     }
     
-    console.log('Required environment variables are set'.green);
+    console.log('All required environment variables are set'.green);
     return true;
   }
   
