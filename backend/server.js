@@ -30,7 +30,7 @@ if (!fs.existsSync(logDir)) {
 
 // Load environment variables
 const loadEnvVars = () => {
-  // In production, we expect environment variables to be set directly
+  // Skip loading .env files in production - use environment variables only
   if (process.env.NODE_ENV === 'production') {
     console.log('Running in production mode'.green);
     
@@ -49,6 +49,7 @@ const loadEnvVars = () => {
   }
   
   // In development, try to load from .env file
+  console.log('Running in development mode'.yellow);
   const envFiles = [
     process.env.ENV_FILE, // Allow override via ENV_FILE
     `./config/config.${process.env.NODE_ENV || 'development'}.env`,
@@ -76,14 +77,20 @@ const loadEnvVars = () => {
   return false;
 };
 
+// Set default NODE_ENV to 'development' if not set
+process.env.NODE_ENV = process.env.NODE_ENV || 'development';
+
 // Load environment variables
 const envLoaded = loadEnvVars();
 
-if (!envLoaded) {
-  if (process.env.NODE_ENV === 'production') {
-    console.error('FATAL: Missing required environment variables in production'.red.bold);
-    process.exit(1);
-  }
+// Only exit if we're in production and required vars are missing
+if (!envLoaded && process.env.NODE_ENV === 'production') {
+  console.error('FATAL: Missing required environment variables in production'.red.bold);
+  process.exit(1);
+}
+
+// In development, just log a warning if .env file wasn't found
+if (!envLoaded && process.env.NODE_ENV !== 'production') {
   console.warn('Warning: Could not load environment variables from file'.yellow);
   console.warn('No environment file found, using system environment variables'.yellow);
 }
