@@ -8,26 +8,46 @@ const connectDB = async () => {
     return null;
   }
 
+  // Ensure the connection string is properly formatted
+  let mongoUri = process.env.MONGODB_URI;
+  
+  // If the URI doesn't end with a database name, add one
+  if (!mongoUri.endsWith('/') && !mongoUri.includes('?')) {
+    mongoUri += '/';
+  }
+  
+  // If no database name is specified, use 'test' as default
+  if (mongoUri.endsWith('/') || mongoUri.endsWith('?')) {
+    mongoUri += 'test';
+  }
+  
+  // Add retryWrites and w=majority if not present
+  if (!mongoUri.includes('retryWrites')) {
+    mongoUri += mongoUri.includes('?') ? '&' : '?';
+    mongoUri += 'retryWrites=true&w=majority';
+  }
+  
+  console.log('Connecting to MongoDB...'.blue);
+  console.log(`Connection string: ${mongoUri.replace(/(mongodb\+srv:\/\/[^:]+:)[^@]+@/, '$1********@')}`);
+  
+  const options = {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 10000, // 10 seconds timeout
+    socketTimeoutMS: 45000, // 45 seconds before timing out
+    connectTimeoutMS: 10000, // 10 seconds to connect
+    family: 4, // Use IPv4, skip trying IPv6
+    maxPoolSize: 10, // Maximum number of connections in the connection pool
+    retryWrites: true,
+    w: 'majority',
+    serverApi: {
+      version: '1',
+      strict: true,
+      deprecationErrors: true,
+    }
+  };
+  
   try {
-    const options = {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 10000, // 10 seconds timeout
-      socketTimeoutMS: 45000, // 45 seconds before timing out
-      connectTimeoutMS: 10000, // 10 seconds to connect
-      family: 4, // Use IPv4, skip trying IPv6
-      maxPoolSize: 10, // Maximum number of connections in the connection pool
-      retryWrites: true,
-      w: 'majority',
-      serverApi: {
-        version: '1',
-        strict: true,
-        deprecationErrors: true,
-      }
-    };
-    
-    console.log('MongoDB Connection Options:', JSON.stringify(options, null, 2));
-    
     const conn = await mongoose.connect(mongoUri, options);
     
     console.log(`MongoDB Connected: ${conn.connection.host}`.cyan.underline.bold);
@@ -35,17 +55,17 @@ const connectDB = async () => {
     
     // Log successful connection
     mongoose.connection.on('connected', () => {
-      console.log('Mongoose connected to DB');
+      console.log('Mongoose connected to DB'.green);
     });
     
     // Log connection errors after initial connection
     mongoose.connection.on('error', (err) => {
-      console.error('MongoDB connection error:', err.message);
+      console.error('MongoDB connection error:'.red, err.message);
     });
     
     // Log when the connection is disconnected
     mongoose.connection.on('disconnected', () => {
-      console.log('MongoDB disconnected');
+      console.log('MongoDB disconnected'.yellow);
     });
     
     // Close the Mongoose connection when Node process ends
@@ -55,13 +75,18 @@ const connectDB = async () => {
       process.exit(0);
     });
     
+    return mongoose.connection;
+    
   } catch (error) {
     console.error('MongoDB Connection Error:'.red.bold);
     console.error(`- Error: ${error.message}`.red);
     if (error.name === 'MongoServerSelectionError') {
-      console.error('- This usually means the MongoDB server is not accessible');
-      console.error('- Please check if your IP is whitelisted in MongoDB Atlas');
-      console.error('- Check your internet connection and MongoDB credentials');
+      console.error('- This usually means the MongoDB server is not accessible'.red);
+      console.error('- Please check if your IP is whitelisted in MongoDB Atlas'.red);
+      console.error('- Check your internet connection and MongoDB credentials'.red);
+    } else if (error.name === 'MongooseServerSelectionError') {
+      console.error('- Could not connect to MongoDB server'.red);
+      console.error('- Please check your connection string and network settings'.red);
     }
     console.error('Exiting application...'.red.bold);
     process.exit(1);

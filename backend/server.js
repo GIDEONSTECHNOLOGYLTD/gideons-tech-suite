@@ -1,9 +1,7 @@
-// Load and validate environment variables
-const loadAndValidateEnvVars = () => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  
+// Simple environment variable loader
+const loadEnvVars = () => {
   // In development, try to load from .env file
-  if (!isProduction) {
+  if (process.env.NODE_ENV !== 'production') {
     console.log('Development: Loading environment variables from .env file'.yellow);
     try {
       require('dotenv').config();
@@ -26,31 +24,13 @@ const loadAndValidateEnvVars = () => {
     }
   });
   console.log('=== End of Environment Variables ===\n'.blue);
-  
-  // Check for required environment variables in production
-  if (isProduction) {
-    const requiredVars = ['MONGODB_URI', 'JWT_SECRET', 'FRONTEND_URL'];
-    const missingVars = requiredVars.filter(varName => !process.env[varName]);
-    
-    if (missingVars.length > 0) {
-      console.error('Error: Missing required environment variables in production:'.red.bold);
-      missingVars.forEach(varName => console.error(`- ${varName}`.red));
-      return false;
-    }
-    
-    // Test MongoDB connection in production
-    if (process.env.MONGODB_URI) {
-      testMongoConnection(process.env.MONGODB_URI);
-    }
-    
-    console.log('All required environment variables are set'.green);
-  }
-  
-  return true;
 };
 
-// Load and validate environment variables
-loadAndValidateEnvVars();
+// Load environment variables first
+loadEnvVars();
+
+// Set default NODE_ENV to 'development' if not set
+process.env.NODE_ENV = process.env.NODE_ENV || 'development';
 
 const express = require('express');
 const colors = require('colors');
@@ -82,26 +62,19 @@ if (!fs.existsSync(logDir)) {
 
 
 
-// Set default NODE_ENV to 'development' if not set
-process.env.NODE_ENV = process.env.NODE_ENV || 'development';
-
-// Load environment variables
-const envLoaded = loadEnvVars();
-
-// Only exit if we're in production and required vars are missing
-if (!envLoaded && process.env.NODE_ENV === 'production') {
-  console.error('FATAL: Missing required environment variables in production'.red.bold);
-  process.exit(1);
+// Check for required environment variables in production
+if (process.env.NODE_ENV === 'production') {
+  const requiredVars = ['MONGODB_URI', 'JWT_SECRET', 'FRONTEND_URL'];
+  const missingVars = requiredVars.filter(varName => !process.env[varName]);
+  
+  if (missingVars.length > 0) {
+    console.error('Error: Missing required environment variables in production:'.red.bold);
+    missingVars.forEach(varName => console.error(`- ${varName}`.red));
+    process.exit(1);
+  }
+  
+  console.log('All required environment variables are set'.green);
 }
-
-// In development, just log a warning if .env file wasn't found
-if (!envLoaded && process.env.NODE_ENV !== 'production') {
-  console.warn('Warning: Could not load environment variables from file'.yellow);
-  console.warn('No environment file found, using system environment variables'.yellow);
-}
-
-// Set default NODE_ENV to 'development' if not set
-process.env.NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Log environment info for debugging
 console.log('Environment:', process.env.NODE_ENV.green.bold);
