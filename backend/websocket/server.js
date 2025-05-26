@@ -61,23 +61,27 @@ const setupWebSocket = (server) => {
     const clientInfo = {
       id: connectionId,
       ws,
-      ip: req.socket.remoteAddress,
+      ip: req.socket.remoteAddress || req.connection.remoteAddress,
       userAgent: req.headers['user-agent'],
       connectedAt: new Date(),
       authenticated: false,
       lastActivity: new Date(),
       userId: null,
-      user: null
+      user: null,
+      heartbeatAlive: true
     };
     
     // Add client to the clients map
     clients.set(connectionId, clientInfo);
     
-    console.log(`New WebSocket connection [${connectionId}] from ${clientInfo.ip}`);
+    console.log(`New WebSocket connection [${connectionId}] from ${clientInfo.ip}`, {
+      url: req.url,
+      headers: req.headers
+    });
     stats.totalConnections++;
-    stats.activeConnections++;
+    stats.activeConnections = clients.size;
 
-    // Set up connection timeout
+    // Set up connection timeout (increased to 30 seconds)
     const connectionTimeout = setTimeout(() => {
       if (ws.readyState === WebSocket.OPEN) {
         console.warn(`Connection [${connectionId}] timed out during authentication`);
@@ -89,18 +93,28 @@ const setupWebSocket = (server) => {
         });
         ws.close(4008, 'Authentication timeout');
       }
-    }, 10000); // 10 second timeout for authentication
+    }, 30000); // 30 second timeout for authentication
 
     // Extract token from URL query parameters or headers
     let token = null;
     try {
-      // Try to get token from URL first
-      if (req.url) {
+      // Try to get token from URL first (for testing)
+      if (req.url && req.url.includes('token=')) {
         const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
         token = url.searchParams.get('token');
       }
       
-      // Fall back to WebSocket protocol header
+      // Check Authorization header (standard for WebSocket with JWT)
+      if (!token && req.headers.authorization) {
+        const authHeader = req.headers.authorization;
+        if (authHeader.startsWith('Bearer ')) {
+          token = authHeader.substring(7);
+        } else {
+          token = authHeader; // Allow raw token for backward compatibility
+        }
+      }
+      
+      // Fall back to WebSocket protocol header (for some WebSocket clients)
       if (!token && req.headers['sec-websocket-protocol']) {
         const protocols = req.headers['sec-websocket-protocol'].split(',').map(p => p.trim());
         const bearerToken = protocols.find(p => p.startsWith('Bearer '));
@@ -111,8 +125,10 @@ const setupWebSocket = (server) => {
           token = protocols[0];
         }
       }
+      
+      console.log(`Connection [${connectionId}] token extracted:`, token ? 'Token exists' : 'No token found');
     } catch (error) {
-      console.error(`Error parsing URL for connection [${connectionId}]:`, error);
+      console.error(`Error extracting token for connection [${connectionId}]:`, error);
     }
     
     if (!token) {
@@ -123,44 +139,65 @@ const setupWebSocket = (server) => {
         message: 'No authentication token provided',
         timestamp: Date.now()
       });
-      ws.close(4001, 'No token provided');
-      clearTimeout(connectionTimeout);
+      // Don't close immediately, wait for the client to send a token in a message
+      // This allows for delayed authentication
+      clientInfo.authenticate = (authToken) => {
+        verifyToken(authToken);
+      };
       return;
     }
-
-    // Verify JWT token
-    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    
+    // If we have a token, verify it immediately
+    verifyToken(token);
+    
+    function verifyToken(authToken) {
       clearTimeout(connectionTimeout);
       
-      if (err) {
-        const errorMsg = `Connection [${connectionId}]: Invalid token - ${err.message}`;
-        console.warn(errorMsg);
+      if (!authToken) {
+        console.warn(`Connection [${connectionId}]: Empty token provided`);
         safeSend(ws, {
           type: 'error',
           code: 'INVALID_TOKEN',
-          message: 'Invalid authentication token',
+          message: 'Authentication token is required',
           timestamp: Date.now()
         });
-        ws.close(4003, 'Invalid token');
+        ws.close(4003, 'Authentication required');
         return;
       }
-      
-      // Token is valid, mark client as authenticated
-      clientInfo.authenticated = true;
-      clientInfo.userId = decoded.userId;
-      clientInfo.user = decoded;
-      
-      console.log(`Connection [${connectionId}] authenticated as user ${decoded.userId}`);
-      
-      // Send welcome message
-      safeSend(ws, {
-        type: 'welcome',
-        message: 'Successfully connected to WebSocket server',
-        timestamp: Date.now(),
-        userId: decoded.userId,
-        connectionId
+
+      // Verify JWT token
+      jwt.verify(authToken, process.env.JWT_SECRET, (err, decoded) => {
+        if (err) {
+          const errorMsg = `Connection [${connectionId}]: Invalid token - ${err.message}`;
+          console.warn(errorMsg);
+          safeSend(ws, {
+            type: 'error',
+            code: 'INVALID_TOKEN',
+            message: 'Invalid authentication token',
+            timestamp: Date.now()
+          });
+          ws.close(4003, 'Invalid token');
+          return;
+        }
+        
+        // Token is valid, mark client as authenticated
+        clientInfo.authenticated = true;
+        clientInfo.userId = decoded.userId;
+        clientInfo.user = decoded;
+        clientInfo.authenticate = null; // Remove the authenticate method
+        
+        console.log(`Connection [${connectionId}] authenticated as user ${decoded.userId}`);
+        
+        // Send welcome message
+        safeSend(ws, {
+          type: 'welcome',
+          message: 'Successfully connected to WebSocket server',
+          timestamp: Date.now(),
+          userId: decoded.userId,
+          connectionId
+        });
       });
-    });
+    }
     
     // Handle incoming messages
     const messageHandler = (message) => {
@@ -185,7 +222,35 @@ const setupWebSocket = (server) => {
           throw new Error('Message must have a type');
         }
         
-        // Handle different message types
+        // Handle authentication message
+        if (data.type === 'authenticate' && !clientInfo.authenticated) {
+          if (clientInfo.authenticate && typeof clientInfo.authenticate === 'function') {
+            clientInfo.authenticate(data.token);
+          } else {
+            safeSend(ws, {
+              type: 'error',
+              code: 'AUTH_ERROR',
+              message: 'Authentication already attempted',
+              timestamp: Date.now(),
+              messageId: data.messageId
+            });
+          }
+          return;
+        }
+        
+        // If not authenticated, only allow authentication messages
+        if (!clientInfo.authenticated) {
+          safeSend(ws, {
+            type: 'error',
+            code: 'UNAUTHENTICATED',
+            message: 'Please authenticate first',
+            timestamp: Date.now(),
+            messageId: data.messageId
+          });
+          return;
+        }
+        
+        // Handle different message types for authenticated users
         switch (data.type) {
           case 'ping':
             safeSend(ws, {
@@ -203,6 +268,30 @@ const setupWebSocket = (server) => {
               originalMessage: data.payload,
               messageId: data.messageId
             });
+            break;
+            
+          case 'get_user_info':
+            if (clientInfo.user) {
+              safeSend(ws, {
+                type: 'user_info',
+                user: {
+                  id: clientInfo.userId,
+                  email: clientInfo.user.email,
+                  name: clientInfo.user.name,
+                  roles: clientInfo.user.roles || []
+                },
+                timestamp: Date.now(),
+                messageId: data.messageId
+              });
+            } else {
+              safeSend(ws, {
+                type: 'error',
+                code: 'USER_INFO_UNAVAILABLE',
+                message: 'User information not available',
+                timestamp: Date.now(),
+                messageId: data.messageId
+              });
+            }
             break;
             
           default:
@@ -251,48 +340,102 @@ const setupWebSocket = (server) => {
     });
 
     // Handle errors
-    ws.on('error', (error) => {
+    const handleError = (error) => {
+      if (clientInfo.errorHandled) return;
+      clientInfo.errorHandled = true;
+      
       console.error(`WebSocket error on connection [${connectionId}]:`, error);
       stats.errors++;
       
       // Try to notify the client about the error if possible
       if (ws.readyState === WebSocket.OPEN) {
-        safeSend(ws, {
-          type: 'error',
-          code: 'WEBSOCKET_ERROR',
-          message: 'A WebSocket error occurred',
-          timestamp: Date.now()
-        });
+        try {
+          safeSend(ws, {
+            type: 'error',
+            code: 'WEBSOCKET_ERROR',
+            message: 'A WebSocket error occurred',
+            timestamp: Date.now()
+          });
+        } catch (sendError) {
+          console.error('Error sending error message to client:', sendError);
+        }
       }
       
-      // Clean up
-      clients.delete(connectionId);
-      stats.activeConnections--;
+      // Clean up resources
+      cleanupConnection();
       
       // Try to close the connection gracefully
       try {
         if (ws.readyState === WebSocket.OPEN) {
           ws.close(1011, 'Internal server error');
+        } else if (ws.readyState === WebSocket.CONNECTING) {
+          // If still connecting, terminate the connection
+          ws.terminate();
         }
       } catch (closeError) {
         console.error('Error closing WebSocket after error:', closeError);
       }
-    });
+    };
+    
+    ws.on('error', handleError);
     
     // Set up heartbeat/ping-pong
     const heartbeatInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         try {
+          // Only send ping if the last one was acknowledged
+          if (!clientInfo.heartbeatAlive) {
+            console.warn(`Connection [${connectionId}] missed heartbeat, terminating`);
+            ws.terminate();
+            return;
+          }
+          
+          clientInfo.heartbeatAlive = false;
           ws.ping();
         } catch (pingError) {
-          console.error('Error sending ping:', pingError);
+          console.error('Error in heartbeat:', pingError);
         }
       }
     }, 30000); // Send ping every 30 seconds
     
+    // Handle pong responses
+    ws.on('pong', () => {
+      clientInfo.heartbeatAlive = true;
+      clientInfo.lastActivity = new Date();
+    });
+    
     // Clean up interval on close
-    ws.on('close', () => {
+    const cleanupConnection = () => {
+      if (clientInfo.cleanedUp) return;
+      clientInfo.cleanedUp = true;
+      
       clearInterval(heartbeatInterval);
+      clearTimeout(connectionTimeout);
+      
+      // Only remove from clients if not already removed
+      if (clients.has(connectionId)) {
+        clients.delete(connectionId);
+        stats.activeConnections = clients.size;
+        console.log(`Connection [${connectionId}] cleaned up. Active connections: ${clients.size}`);
+      }
+      
+      // Remove all listeners to prevent memory leaks
+      ws.removeAllListeners('message');
+      ws.removeAllListeners('close');
+      ws.removeAllListeners('error');
+      ws.removeAllListeners('pong');
+    };
+    
+    // Set up connection cleanup on close and error
+    ws.on('close', (code, reason) => {
+      const reasonStr = reason || 'No reason provided';
+      console.log(`Connection [${connectionId}] closed. Code: ${code}, Reason: ${reasonStr}`);
+      cleanupConnection();
+    });
+    
+    ws.on('error', (error) => {
+      console.error(`Connection [${connectionId}] error:`, error);
+      handleError(error);
     });
   });
 
