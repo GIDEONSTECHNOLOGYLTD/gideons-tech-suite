@@ -1,10 +1,11 @@
 // Only require dotenv in non-production environments
+let dotenv;
 if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
+  dotenv = require('dotenv');
+  dotenv.config();
 }
 
 const express = require('express');
-const dotenv = require('dotenv');
 const colors = require('colors');
 const morgan = require('morgan');
 const path = require('path');
@@ -55,41 +56,36 @@ const loadEnvVars = () => {
     // In development, try to load from .env file
   console.log('Running in development mode'.yellow);
   
-  try {
-    // Try to load dotenv if not already loaded
-    if (typeof process.env.NODE_ENV === 'undefined') {
-      require('dotenv').config();
-    }
-    
-    const envFiles = [
-      process.env.ENV_FILE, // Allow override via ENV_FILE
-      `./config/config.${process.env.NODE_ENV || 'development'}.env`,
-      './config/config.env',
-      '.env',
-      '../.env'
-    ];
-    
-    for (const envFile of envFiles) {
-      if (envFile) {
-        try {
-          const fullPath = path.isAbsolute(envFile) ? envFile : path.join(__dirname, envFile);
-          if (fs.existsSync(fullPath)) {
-            require('dotenv').config({ path: fullPath });
-            console.log(`Loaded environment variables from ${fullPath}`.green);
-            return true;
-          }
-        } catch (err) {
-          console.warn(`Warning: Could not load environment file at ${envFile}: ${err.message}`.yellow);
-        }
-      }
-    }
-    
-    console.warn('Warning: No environment files were loaded'.yellow);
-    return false;
-  } catch (err) {
-    console.error('Error loading environment variables:'.red, err);
+  if (!dotenv) {
+    console.warn('Warning: dotenv not available in production'.yellow);
     return false;
   }
+  
+  const envFiles = [
+    process.env.ENV_FILE, // Allow override via ENV_FILE
+    `./config/config.${process.env.NODE_ENV || 'development'}.env`,
+    './config/config.env',
+    '.env',
+    '../.env'
+  ];
+  
+  for (const envFile of envFiles) {
+    if (envFile) {
+      try {
+        const fullPath = path.isAbsolute(envFile) ? envFile : path.join(__dirname, envFile);
+        if (fs.existsSync(fullPath)) {
+          dotenv.config({ path: fullPath });
+          console.log(`Loaded environment variables from ${fullPath}`.green);
+          return true;
+        }
+      } catch (err) {
+        console.warn(`Warning: Could not load environment file at ${envFile}: ${err.message}`.yellow);
+      }
+    }
+  }
+    
+  console.warn('Warning: No environment files were loaded'.yellow);
+  return false;
 };
 
 // Set default NODE_ENV to 'development' if not set
