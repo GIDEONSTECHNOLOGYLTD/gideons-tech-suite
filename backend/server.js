@@ -33,8 +33,18 @@ const loadEnvVars = () => {
   // In production, we expect environment variables to be set directly
   if (process.env.NODE_ENV === 'production') {
     console.log('Running in production mode'.green);
-    // In production, we'll use the environment variables directly
-    // No need to load from .env file
+    
+    // Check for required environment variables in production
+    const requiredVars = ['MONGODB_URI', 'JWT_SECRET', 'FRONTEND_URL'];
+    const missingVars = requiredVars.filter(varName => !process.env[varName]);
+    
+    if (missingVars.length > 0) {
+      console.error('Error: Missing required environment variables in production:'.red.bold);
+      missingVars.forEach(varName => console.error(`- ${varName}`.red));
+      return false;
+    }
+    
+    console.log('Required environment variables are set'.green);
     return true;
   }
   
@@ -69,7 +79,12 @@ const loadEnvVars = () => {
 // Load environment variables
 const envLoaded = loadEnvVars();
 
-if (!envLoaded && process.env.NODE_ENV !== 'production') {
+if (!envLoaded) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL: Missing required environment variables in production'.red.bold);
+    process.exit(1);
+  }
+  console.warn('Warning: Could not load environment variables from file'.yellow);
   console.warn('No environment file found, using system environment variables'.yellow);
 }
 
