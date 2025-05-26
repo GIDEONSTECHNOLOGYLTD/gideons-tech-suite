@@ -25,7 +25,7 @@ services:
       - key: MAX_FILE_UPLOAD
         value: "5242880"  # 5MB in bytes
       - key: FRONTEND_URL
-        value: https://gideons-tech-frontend.vercel.app
+        value: https://frontend-t73t.onrender.com
       - key: WEBSOCKET_PATH
         value: /ws
     healthCheckPath: /api/health
