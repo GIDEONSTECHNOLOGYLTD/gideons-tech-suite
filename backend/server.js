@@ -1,14 +1,13 @@
 // Only require dotenv in non-production environments
-let dotenv;
 if (process.env.NODE_ENV !== 'production') {
   try {
-    dotenv = require('dotenv');
-    dotenv.config();
+    require('dotenv').config();
+    console.log('Development: Loaded environment variables from .env file'.green);
   } catch (err) {
-    console.warn('Warning: Could not load dotenv'.yellow, err.message);
+    console.warn('Warning: Could not load .env file'.yellow, err.message);
   }
 } else {
-  console.log('Running in production mode - skipping .env loading'.green);
+  console.log('Production: Using environment variables from system'.green);
 }
 
 const express = require('express');
@@ -43,7 +42,7 @@ if (!fs.existsSync(logDir)) {
 const loadEnvVars = () => {
   // In production, we only check for required variables
   if (process.env.NODE_ENV === 'production') {
-    console.log('Running in production mode - checking required variables'.green);
+    console.log('Production: Checking required environment variables'.green);
     
     // Check for required environment variables in production
     const requiredVars = ['MONGODB_URI', 'JWT_SECRET', 'FRONTEND_URL'];
@@ -55,17 +54,18 @@ const loadEnvVars = () => {
       return false;
     }
     
+    // Log masked MongoDB URI for debugging
+    const maskedMongoUri = process.env.MONGODB_URI 
+      ? process.env.MONGODB_URI.replace(/(mongodb\+srv:\/\/[^:]+:)[^@]+@/, '$1********@')
+      : 'Not set';
+    
+    console.log('MongoDB URI:', maskedMongoUri);
     console.log('All required environment variables are set'.green);
     return true;
   }
   
     // In development, try to load from .env file
-  console.log('Running in development mode'.yellow);
-  
-  if (!dotenv) {
-    console.warn('Warning: dotenv not available in production'.yellow);
-    return false;
-  }
+  console.log('Development: Loading environment variables'.yellow);
   
   const envFiles = [
     process.env.ENV_FILE, // Allow override via ENV_FILE
@@ -80,8 +80,8 @@ const loadEnvVars = () => {
       try {
         const fullPath = path.isAbsolute(envFile) ? envFile : path.join(__dirname, envFile);
         if (fs.existsSync(fullPath)) {
-          dotenv.config({ path: fullPath });
-          console.log(`Loaded environment variables from ${fullPath}`.green);
+          require('dotenv').config({ path: fullPath });
+          console.log(`Development: Loaded environment variables from ${fullPath}`.green);
           return true;
         }
       } catch (err) {
@@ -89,7 +89,7 @@ const loadEnvVars = () => {
       }
     }
   }
-    
+  
   console.warn('Warning: No environment files were loaded'.yellow);
   return false;
 };
