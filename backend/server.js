@@ -1,27 +1,39 @@
-// Only require dotenv in non-production environments
-if (process.env.NODE_ENV !== 'production') {
+// Load environment variables
+const loadEnvVars = () => {
+  // In production, we only check for required variables
+  if (process.env.NODE_ENV === 'production') {
+    console.log('Production: Using environment variables from system'.green);
+    
+    // Log environment variables (masking sensitive ones)
+    console.log('\n=== Environment Variables ==='.blue);
+    Object.keys(process.env).forEach(key => {
+      if (key.includes('SECRET') || key.includes('PASSWORD') || key.includes('TOKEN') || key.includes('KEY')) {
+        console.log(`${key}: ********`);
+      } else if (key === 'MONGODB_URI') {
+        console.log(`${key}: ${process.env[key].replace(/(mongodb\+srv:\/\/[^:]+:)[^@]+@/, '$1********@')}`);
+      } else {
+        console.log(`${key}: ${process.env[key]}`);
+      }
+    });
+    console.log('=== End of Environment Variables ===\n'.blue);
+    
+    return true;
+  }
+  
+  // In development, try to load from .env file
+  console.log('Development: Loading environment variables from .env file'.yellow);
+  
   try {
     require('dotenv').config();
-    console.log('Development: Loaded environment variables from .env file'.green);
+    return true;
   } catch (err) {
     console.warn('Warning: Could not load .env file'.yellow, err.message);
+    return false;
   }
-} else {
-  console.log('Production: Using environment variables from system'.green);
-  
-  // Log all environment variables (masking sensitive ones)
-  console.log('\n=== Environment Variables ==='.blue);
-  Object.keys(process.env).forEach(key => {
-    if (key.includes('SECRET') || key.includes('PASSWORD') || key.includes('TOKEN') || key.includes('KEY')) {
-      console.log(`${key}: ********`);
-    } else if (key === 'MONGODB_URI') {
-      console.log(`${key}: ${process.env[key].replace(/(mongodb\+srv:\/\/[^:]+:)[^@]+@/, '$1********@')}`);
-    } else {
-      console.log(`${key}: ${process.env[key]}`);
-    }
-  });
-  console.log('=== End of Environment Variables ===\n'.blue);
-}
+};
+
+// Load environment variables
+loadEnvVars();
 
 const express = require('express');
 const colors = require('colors');
