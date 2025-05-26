@@ -1,4 +1,8 @@
-require('dotenv').config();
+// Only require dotenv in non-production environments
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
+
 const express = require('express');
 const dotenv = require('dotenv');
 const colors = require('colors');
@@ -30,7 +34,7 @@ if (!fs.existsSync(logDir)) {
 
 // Load environment variables
 const loadEnvVars = () => {
-  // Skip loading .env files in production - use environment variables only
+  // In production, we only check for required variables
   if (process.env.NODE_ENV === 'production') {
     console.log('Running in production mode'.green);
     
@@ -48,33 +52,44 @@ const loadEnvVars = () => {
     return true;
   }
   
-  // In development, try to load from .env file
+    // In development, try to load from .env file
   console.log('Running in development mode'.yellow);
-  const envFiles = [
-    process.env.ENV_FILE, // Allow override via ENV_FILE
-    `./config/config.${process.env.NODE_ENV || 'development'}.env`,
-    './config/config.env',
-    '.env',
-    '../.env'
-  ];
   
-  for (const envFile of envFiles) {
-    if (envFile) {
-      try {
-        const fullPath = path.isAbsolute(envFile) ? envFile : path.join(__dirname, envFile);
-        if (fs.existsSync(fullPath)) {
-          dotenv.config({ path: fullPath });
-          console.log(`Loaded environment variables from ${fullPath}`.green);
-          return true;
+  try {
+    // Try to load dotenv if not already loaded
+    if (typeof process.env.NODE_ENV === 'undefined') {
+      require('dotenv').config();
+    }
+    
+    const envFiles = [
+      process.env.ENV_FILE, // Allow override via ENV_FILE
+      `./config/config.${process.env.NODE_ENV || 'development'}.env`,
+      './config/config.env',
+      '.env',
+      '../.env'
+    ];
+    
+    for (const envFile of envFiles) {
+      if (envFile) {
+        try {
+          const fullPath = path.isAbsolute(envFile) ? envFile : path.join(__dirname, envFile);
+          if (fs.existsSync(fullPath)) {
+            require('dotenv').config({ path: fullPath });
+            console.log(`Loaded environment variables from ${fullPath}`.green);
+            return true;
+          }
+        } catch (err) {
+          console.warn(`Warning: Could not load environment file at ${envFile}: ${err.message}`.yellow);
         }
-      } catch (err) {
-        console.warn(`Warning: Could not load environment file at ${envFile}: ${err.message}`.yellow);
       }
     }
+    
+    console.warn('Warning: No environment files were loaded'.yellow);
+    return false;
+  } catch (err) {
+    console.error('Error loading environment variables:'.red, err);
+    return false;
   }
-  
-  console.warn('Warning: No environment files were loaded'.yellow);
-  return false;
 };
 
 // Set default NODE_ENV to 'development' if not set
@@ -563,54 +578,6 @@ const onError = (error) => {
 
 // Start the server if this file is run directly (not when imported)
 if (require.main === module) {
-  // Load environment variables
-  const loadEnvVars = () => {
-    // In production, we expect environment variables to be set directly
-    if (process.env.NODE_ENV === 'production') {
-      console.log('Running in production mode');
-      // In production, we'll use the environment variables directly
-      // No need to load from .env file
-      return;
-    }
-    
-    // In development, try to load from .env file
-    try {
-      const dotenv = require('dotenv');
-      // Try multiple possible .env file locations
-      const envFiles = [
-        path.join(__dirname, '../.env'),
-        path.join(__dirname, '.env'),
-        path.join(process.cwd(), '.env')
-      ];
-      
-      let loaded = false;
-      for (const envFile of envFiles) {
-        try {
-          if (fs.existsSync(envFile)) {
-            const result = dotenv.config({ path: envFile });
-            if (!result.error) {
-              console.log(`Environment variables loaded from ${envFile}`);
-              loaded = true;
-              break;
-            }
-          }
-        } catch (err) {
-          console.warn(`Warning: Error loading ${envFile}:`, err.message);
-        }
-      }
-      
-      if (!loaded) {
-        console.warn('Warning: No .env file found or error loading .env files');
-        console.warn('Using system environment variables or defaults');
-      }
-    } catch (error) {
-      console.warn('Warning: Error loading .env file:', error.message);
-    }
-  };
-
-  // Load environment variables
-  loadEnvVars();
-
   // Validate required environment variables
   const requiredEnvVars = [
     'MONGODB_URI',
@@ -629,7 +596,7 @@ if (require.main === module) {
     process.env.FRONTEND_URL = 'https://gideons-tech-suite.onrender.com';
   }
 
-  // Only check for MONGODB_URI as it's critical
+  // Check for MONGODB_URI as it's critical
   if (!process.env.MONGODB_URI) {
     const errorMsg = 'Error: MONGODB_URI is required but not set';
     console.error(errorMsg.red);
