@@ -1,39 +1,56 @@
-// Load environment variables
-const loadEnvVars = () => {
-  // In production, we only check for required variables
-  if (process.env.NODE_ENV === 'production') {
-    console.log('Production: Using environment variables from system'.green);
-    
-    // Log environment variables (masking sensitive ones)
-    console.log('\n=== Environment Variables ==='.blue);
-    Object.keys(process.env).forEach(key => {
-      if (key.includes('SECRET') || key.includes('PASSWORD') || key.includes('TOKEN') || key.includes('KEY')) {
-        console.log(`${key}: ********`);
-      } else if (key === 'MONGODB_URI') {
-        console.log(`${key}: ${process.env[key].replace(/(mongodb\+srv:\/\/[^:]+:)[^@]+@/, '$1********@')}`);
-      } else {
-        console.log(`${key}: ${process.env[key]}`);
-      }
-    });
-    console.log('=== End of Environment Variables ===\n'.blue);
-    
-    return true;
-  }
+// Load and validate environment variables
+const loadAndValidateEnvVars = () => {
+  const isProduction = process.env.NODE_ENV === 'production';
   
   // In development, try to load from .env file
-  console.log('Development: Loading environment variables from .env file'.yellow);
-  
-  try {
-    require('dotenv').config();
-    return true;
-  } catch (err) {
-    console.warn('Warning: Could not load .env file'.yellow, err.message);
-    return false;
+  if (!isProduction) {
+    console.log('Development: Loading environment variables from .env file'.yellow);
+    try {
+      require('dotenv').config();
+    } catch (err) {
+      console.warn('Warning: Could not load .env file'.yellow, err.message);
+    }
+  } else {
+    console.log('Production: Using environment variables from system'.green);
   }
+  
+  // Log environment variables (masking sensitive ones)
+  console.log('\n=== Environment Variables ==='.blue);
+  Object.keys(process.env).forEach(key => {
+    if (key.includes('SECRET') || key.includes('PASSWORD') || key.includes('TOKEN') || key.includes('KEY')) {
+      console.log(`${key}: ********`);
+    } else if (key === 'MONGODB_URI') {
+      console.log(`${key}: ${process.env[key] ? process.env[key].replace(/(mongodb\+srv:\/\/[^:]+:)[^@]+@/, '$1********@') : 'Not set'}`);
+    } else {
+      console.log(`${key}: ${process.env[key]}`);
+    }
+  });
+  console.log('=== End of Environment Variables ===\n'.blue);
+  
+  // Check for required environment variables in production
+  if (isProduction) {
+    const requiredVars = ['MONGODB_URI', 'JWT_SECRET', 'FRONTEND_URL'];
+    const missingVars = requiredVars.filter(varName => !process.env[varName]);
+    
+    if (missingVars.length > 0) {
+      console.error('Error: Missing required environment variables in production:'.red.bold);
+      missingVars.forEach(varName => console.error(`- ${varName}`.red));
+      return false;
+    }
+    
+    // Test MongoDB connection in production
+    if (process.env.MONGODB_URI) {
+      testMongoConnection(process.env.MONGODB_URI);
+    }
+    
+    console.log('All required environment variables are set'.green);
+  }
+  
+  return true;
 };
 
-// Load environment variables
-loadEnvVars();
+// Load and validate environment variables
+loadAndValidateEnvVars();
 
 const express = require('express');
 const colors = require('colors');
@@ -63,65 +80,7 @@ if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir);
 }
 
-// Load environment variables
-const loadEnvVars = () => {
-  // In production, we only check for required variables
-  if (process.env.NODE_ENV === 'production') {
-    console.log('Production: Checking required environment variables'.green);
-    
-    // Check for required environment variables in production
-    const requiredVars = ['MONGODB_URI', 'JWT_SECRET', 'FRONTEND_URL'];
-    const missingVars = requiredVars.filter(varName => !process.env[varName]);
-    
-    if (missingVars.length > 0) {
-      console.error('Error: Missing required environment variables in production:'.red.bold);
-      missingVars.forEach(varName => console.error(`- ${varName}`.red));
-      return false;
-    }
-    
-    // Log masked MongoDB URI for debugging
-    const maskedMongoUri = process.env.MONGODB_URI 
-      ? process.env.MONGODB_URI.replace(/(mongodb\+srv:\/\/[^:]+:)[^@]+@/, '$1********@')
-      : 'Not set';
-    
-    console.log('MongoDB URI:', maskedMongoUri);
-    
-    // Test MongoDB connection
-    testMongoConnection(process.env.MONGODB_URI);
-    
-    console.log('All required environment variables are set'.green);
-    return true;
-  }
-  
-    // In development, try to load from .env file
-  console.log('Development: Loading environment variables'.yellow);
-  
-  const envFiles = [
-    process.env.ENV_FILE, // Allow override via ENV_FILE
-    `./config/config.${process.env.NODE_ENV || 'development'}.env`,
-    './config/config.env',
-    '.env',
-    '../.env'
-  ];
-  
-  for (const envFile of envFiles) {
-    if (envFile) {
-      try {
-        const fullPath = path.isAbsolute(envFile) ? envFile : path.join(__dirname, envFile);
-        if (fs.existsSync(fullPath)) {
-          require('dotenv').config({ path: fullPath });
-          console.log(`Development: Loaded environment variables from ${fullPath}`.green);
-          return true;
-        }
-      } catch (err) {
-        console.warn(`Warning: Could not load environment file at ${envFile}: ${err.message}`.yellow);
-      }
-    }
-  }
-  
-  console.warn('Warning: No environment files were loaded'.yellow);
-  return false;
-};
+
 
 // Set default NODE_ENV to 'development' if not set
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
