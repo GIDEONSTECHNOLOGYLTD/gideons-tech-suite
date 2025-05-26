@@ -8,6 +8,19 @@ if (process.env.NODE_ENV !== 'production') {
   }
 } else {
   console.log('Production: Using environment variables from system'.green);
+  
+  // Log all environment variables (masking sensitive ones)
+  console.log('\n=== Environment Variables ==='.blue);
+  Object.keys(process.env).forEach(key => {
+    if (key.includes('SECRET') || key.includes('PASSWORD') || key.includes('TOKEN') || key.includes('KEY')) {
+      console.log(`${key}: ********`);
+    } else if (key === 'MONGODB_URI') {
+      console.log(`${key}: ${process.env[key].replace(/(mongodb\+srv:\/\/[^:]+:)[^@]+@/, '$1********@')}`);
+    } else {
+      console.log(`${key}: ${process.env[key]}`);
+    }
+  });
+  console.log('=== End of Environment Variables ===\n'.blue);
 }
 
 const express = require('express');
@@ -60,6 +73,10 @@ const loadEnvVars = () => {
       : 'Not set';
     
     console.log('MongoDB URI:', maskedMongoUri);
+    
+    // Test MongoDB connection
+    testMongoConnection(process.env.MONGODB_URI);
+    
     console.log('All required environment variables are set'.green);
     return true;
   }
