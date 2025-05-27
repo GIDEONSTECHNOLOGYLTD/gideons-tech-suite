@@ -1,36 +1,6 @@
-// Simple environment variable loader
-const loadEnvVars = () => {
-  // In development, try to load from .env file
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('Development: Loading environment variables from .env file'.yellow);
-    try {
-      require('dotenv').config();
-    } catch (err) {
-      console.warn('Warning: Could not load .env file'.yellow, err.message);
-    }
-  } else {
-    console.log('Production: Using environment variables from system'.green);
-  }
-  
-  // Log environment variables (masking sensitive ones)
-  console.log('\n=== Environment Variables ==='.blue);
-  Object.keys(process.env).forEach(key => {
-    if (key.includes('SECRET') || key.includes('PASSWORD') || key.includes('TOKEN') || key.includes('KEY')) {
-      console.log(`${key}: ********`);
-    } else if (key === 'MONGODB_URI') {
-      console.log(`${key}: ${process.env[key] ? process.env[key].replace(/(mongodb\+srv:\/\/[^:]+:)[^@]+@/, '$1********@') : 'Not set'}`);
-    } else {
-      console.log(`${key}: ${process.env[key]}`);
-    }
-  });
-  console.log('=== End of Environment Variables ===\n'.blue);
-};
-
-// Load environment variables first
-loadEnvVars();
-
-// Set default NODE_ENV to 'development' if not set
-process.env.NODE_ENV = process.env.NODE_ENV || 'development';
+// Load and initialize environment configuration first
+const env = require('./config/env');
+env.load();
 
 const express = require('express');
 const colors = require('colors');
@@ -62,55 +32,18 @@ if (!fs.existsSync(logDir)) {
 
 
 
-// Check for required environment variables in production
-if (process.env.NODE_ENV === 'production') {
-  const requiredVars = ['MONGODB_URI', 'JWT_SECRET', 'FRONTEND_URL'];
-  const missingVars = requiredVars.filter(varName => !process.env[varName]);
-  
-  if (missingVars.length > 0) {
-    console.error('Error: Missing required environment variables in production:'.red.bold);
-    missingVars.forEach(varName => console.error(`- ${varName}`.red));
-    process.exit(1);
-  }
-  
-  console.log('All required environment variables are set'.green);
-}
+// Log startup information
+console.log(`\n=== ${process.env.npm_package_name} v${process.env.npm_package_version} ===`.blue.bold);
+console.log(`Environment: ${env.isProduction() ? 'PRODUCTION'.red.bold : 'development'.yellow.bold}`);
+console.log(`Node.js: ${process.version}`);
+console.log(`Platform: ${process.platform} ${process.arch}`);
 
-// Log environment info for debugging
-console.log('Environment:', process.env.NODE_ENV.green.bold);
-console.log('Server running in', process.env.NODE_ENV === 'production' ? 'production'.green.bold : 'development'.yellow.bold, 'mode');
-
-// Check for required environment variables
-const requiredVars = ['MONGODB_URI', 'JWT_SECRET'];
-const missingRequiredVars = requiredVars.filter(varName => !process.env[varName]);
-
-if (missingRequiredVars.length > 0) {
-  console.error('Error: The following required environment variables are missing:'.red.bold);
-  missingRequiredVars.forEach(varName => console.error(`- ${varName}`.red));
-  process.exit(1);
-}
-
-// Log which required variables are set (without sensitive values)
-console.log('MongoDB connected:', process.env.MONGODB_URI ? 'Yes' : 'No'.red);
-console.log('JWT Secret:', process.env.JWT_SECRET ? 'Set' : 'Not set'.red);
-
-// Log other important config
-console.log('Running in', process.env.NODE_ENV, 'mode');
-
-// Log environment info
-logger.info(`Starting ${process.env.npm_package_name} v${process.env.npm_package_version}`);
-logger.info(`Environment: ${process.env.NODE_ENV}`);
-logger.info(`Node version: ${process.version}`);
-logger.info(`Platform: ${process.platform} ${process.arch}`);
-
-// Log environment info (without sensitive data)
-console.log(`Environment: ${process.env.NODE_ENV}`.cyan.bold);
-console.log(`Server running in ${process.env.NODE_ENV} mode`.yellow.bold);
-console.log(`MongoDB connected: ${process.env.MONGODB_URI ? 'Yes' : 'No'}`);
-console.log(`JWT Secret: ${process.env.JWT_SECRET ? 'Set' : 'Not set'}`.grey);
-
-// Log environment for debugging
-console.log(`Running in ${process.env.NODE_ENV} mode`.yellow.bold);
+// Log environment summary
+console.log('\n=== Environment Summary ==='.blue);
+console.log(`MongoDB: ${env.get('MONGODB_URI') ? 'Configured'.green : 'Not configured'.red}`);
+console.log(`JWT: ${env.get('JWT_SECRET') ? 'Configured'.green : 'Not configured'.red}`);
+console.log(`Frontend URL: ${env.get('FRONTEND_URL', 'Not set').yellow}`);
+console.log('===========================\n'.blue);
 
 const app = require('./app');
 
@@ -120,10 +53,10 @@ const app = require('./app');
     await connectDB();
     
     // Test the connection
-    const result = await testMongoConnection(process.env.MONGODB_URI);
+    const result = await testMongoConnection(env.getRequired('MONGODB_URI'));
     if (result.success) {
-      console.log('Successfully connected to MongoDB!'.green);
-      console.log('Available databases:'.green, result.databases.join(', '));
+      console.log('✅ Successfully connected to MongoDB!'.green);
+      console.log('📊 Available databases:'.blue, result.databases.join(', ').blue);
     } else {
       console.error('Failed to connect to MongoDB:'.red, result.error);
       console.error('Error name:'.red, result.name);
