@@ -45,15 +45,31 @@ const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       'https://frontend-t73t.onrender.com',
-      'http://localhost:3000'
+      'http://localhost:3000',
+      'http://localhost:3001', // Test server
+      'https://gideons-tech-suite.vercel.app', // Production frontend
+      /^https:\/\/gideons-tech-suite-.*\.vercel\.app$/ // Vercel preview URLs
     ];
+    
     // allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
-      return callback(new Error(msg), false);
+    
+    // Check if the origin is in the allowed origins or matches a pattern
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      if (typeof allowedOrigin === 'string') {
+        return origin === allowedOrigin;
+      } else if (allowedOrigin instanceof RegExp) {
+        return allowedOrigin.test(origin);
+      }
+      return false;
+    });
+    
+    if (isAllowed) {
+      return callback(null, true);
     }
-    return callback(null, true);
+    
+    const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+    return callback(new Error(msg), false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
