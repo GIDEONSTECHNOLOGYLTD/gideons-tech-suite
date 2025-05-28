@@ -2,9 +2,15 @@ const WebSocket = require('ws');
 
 // Initialize WebSocket server
 const setupWebSocket = (server) => {
+  // Check if we're in a serverless environment
+  const isServerless = process.env.VERCEL === '1' || process.env.NOW_REGION;
+  
+  // Configure WebSocket server based on environment
   const wss = new WebSocket.Server({ 
     server,
-    path: '/ws'
+    path: '/ws',
+    // In serverless environments, we need to handle noServer mode
+    noServer: isServerless
   });
 
   console.log('WebSocket server initialized');

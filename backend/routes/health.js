@@ -10,14 +10,21 @@ const { version } = require('../../package.json');
  * @access  Public
  */
 router.get('*', async (req, res) => {
-  const startTime = process.hrtime();
-  const healthCheck = {
-    status: 'UP',
-    timestamp: new Date().toISOString(),
-    service: 'Gideon\'s Tech Suite API',
-    version: version,
-    environment: process.env.NODE_ENV,
-    requestPath: req.path,
+  try {
+    const startTime = process.hrtime();
+    const healthCheck = {
+      status: 'UP',
+      timestamp: new Date().toISOString(),
+      service: 'Gideon\'s Tech Suite API',
+      version: version,
+      environment: process.env.NODE_ENV || 'development',
+      requestPath: req.path,
+      vercel: {
+        isVercel: process.env.VERCEL === '1',
+        region: process.env.NOW_REGION || 'unknown',
+        url: process.env.VERCEL_URL || 'unknown',
+        env: process.env.VERCEL_ENV || 'unknown'
+      },
     
     // System information
     system: {
@@ -74,6 +81,15 @@ router.get('*', async (req, res) => {
   res.set('X-Health-Check-Timestamp', new Date().toISOString());
   
   res.status(statusCode).json(healthCheck);
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({
+      status: 'DOWN',
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
+    });
+  }
 });
 
 // Helper function to get collection counts

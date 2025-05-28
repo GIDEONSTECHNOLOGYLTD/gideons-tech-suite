@@ -195,22 +195,46 @@ const initServer = async () => {
 // Export the app and init function
 module.exports = async (req, res) => {
   try {
+    // Add basic health check endpoint that doesn't require initialization
+    if (req.url === '/api/health' || req.url === '/health') {
+      return res.status(200).json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development',
+        message: 'API is healthy!'
+      });
+    }
+    
     // Initialize the server if not already done
     if (!app._initialized) {
-      await initServer();
-      app._initialized = true;
+      console.log('Initializing server for the first time');
+      try {
+        await initServer();
+        app._initialized = true;
+        console.log('Server initialization complete');
+      } catch (initError) {
+        console.error('Server initialization failed:', initError);
+        return res.status(500).json({
+          error: 'Server Initialization Failed',
+          message: initError.message,
+          stack: process.env.NODE_ENV === 'production' ? undefined : initError.stack
+        });
+      }
     }
     
     // Special handling for WebSocket upgrade requests
     if (req.method === 'GET' && req.url.startsWith('/ws')) {
       // For WebSocket connections in Vercel environment
-      // Note: This is handled differently in production by the WebSocket server
       if (app.httpServer) {
         console.log('WebSocket connection request received');
         app.httpServer.emit('upgrade', req, res.socket, Buffer.from([]));
         return;
       } else {
         console.error('WebSocket server not initialized');
+        return res.status(500).json({
+          error: 'WebSocket Not Available',
+          message: 'WebSocket server has not been initialized'
+        });
       }
     }
     
@@ -218,9 +242,10 @@ module.exports = async (req, res) => {
     return app(req, res);
   } catch (error) {
     console.error('Serverless function error:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: 'Internal Server Error',
-      message: error.message 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
     });
   }
 };
