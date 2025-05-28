@@ -1,4 +1,5 @@
 // Minimal Vercel serverless function using CommonJS format
+// This endpoint is public and does not require authentication
 module.exports = (req, res) => {
   try {
     // Set CORS headers

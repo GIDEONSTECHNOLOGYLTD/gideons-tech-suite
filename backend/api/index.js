@@ -1,4 +1,5 @@
 // Main API handler for Vercel serverless environment
+// Root API endpoint is public and does not require authentication
 module.exports = (req, res) => {
   try {
     // Set CORS headers for all responses

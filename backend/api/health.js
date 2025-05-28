@@ -1,11 +1,12 @@
 // Dedicated health check endpoint for Vercel serverless environment
+// This endpoint is public and does not require authentication
 module.exports = (req, res) => {
   try {
-    // Set CORS headers
+    // Set CORS headers to allow access from any origin
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
+    
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
       return res.status(200).end();
