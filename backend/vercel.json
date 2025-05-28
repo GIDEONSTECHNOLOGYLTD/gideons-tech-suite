@@ -15,11 +15,5 @@
       "src": "/(.*)",
       "dest": "/api/$1"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production",
-    "MONGODB_URI": "@gideons_tech_suite_mongodb_uri",
-    "JWT_SECRET": "@gideons_tech_suite_jwt_secret",
-    "FRONTEND_URL": "https://frontend-t73t.onrender.com"
-  }
+  ]
 }
