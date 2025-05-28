@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "name": "gideons-tech-suite-api",
   "builds": [
     {
       "src": "server.js",
@@ -7,11 +8,13 @@
     }
   ],
   "routes": [
+    { "src": "/ws", "dest": "/server.js" },
     { "src": "/api/v1/(.*)", "dest": "/server.js" },
     { "src": "/api/(.*)", "dest": "/server.js" },
     { "src": "/(.*)", "dest": "/server.js" }
   ],
   "env": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "FRONTEND_URL": "https://gideons-tech-suite.vercel.app"
   }
 }
