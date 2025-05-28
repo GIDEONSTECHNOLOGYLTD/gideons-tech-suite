@@ -156,15 +156,23 @@ const initServer = async () => {
     // Connect to database
     await connectDB();
 
+    // Create HTTP server for both Express and WebSockets
+    const server = http.createServer(app);
+    
+    // Initialize WebSocket server
+    const setupWebSocket = require('./websocket');
+    const wsServer = setupWebSocket(server);
+    
+    // Store WebSocket server instance on app for use in routes
+    app.wsServer = wsServer;
+    
     // Start the server if this file is run directly (not when imported)
     if (require.main === module) {
       const PORT = process.env.PORT || 5000;
-      const server = app.listen(
-        PORT,
-        console.log(
-          `Server running in ${process.env.NODE_ENV} mode on port ${PORT}`.yellow.bold
-        )
-      );
+      server.listen(PORT, () => {
+        console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`.yellow.bold);
+        console.log(`WebSocket server available at ws://localhost:${PORT}/ws`.cyan);
+      });
 
       // Handle unhandled promise rejections
       process.on('unhandledRejection', (err, promise) => {
@@ -173,6 +181,9 @@ const initServer = async () => {
         server.close(() => process.exit(1));
       });
     }
+    
+    // Store HTTP server instance on app for serverless function
+    app.httpServer = server;
     
     return app;
   } catch (error) {
@@ -189,6 +200,20 @@ module.exports = async (req, res) => {
       await initServer();
       app._initialized = true;
     }
+    
+    // Special handling for WebSocket upgrade requests
+    if (req.method === 'GET' && req.url.startsWith('/ws')) {
+      // For WebSocket connections in Vercel environment
+      // Note: This is handled differently in production by the WebSocket server
+      if (app.httpServer) {
+        console.log('WebSocket connection request received');
+        app.httpServer.emit('upgrade', req, res.socket, Buffer.from([]));
+        return;
+      } else {
+        console.error('WebSocket server not initialized');
+      }
+    }
+    
     // Forward the request to the Express app
     return app(req, res);
   } catch (error) {
