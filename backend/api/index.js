@@ -1,4 +1,5 @@
 const express = require('express');
+const { createServer } = require('http');
 
 // Create a simple Express app
 const app = express();
@@ -6,6 +7,20 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// CORS middleware
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -16,7 +31,8 @@ app.get('/', (req, res) => {
     timestamp: new Date().toISOString(),
     endpoints: {
       health: '/api/health',
-      test: '/api/test'
+      test: '/api/test',
+      root: '/'
     }
   });
 });
@@ -43,45 +59,30 @@ app.all('*', (req, res) => {
   res.status(404).json({
     success: false,
     error: 'Not Found',
-    message: `Cannot ${req.method} ${req.path}`
+    message: `Cannot ${req.method} ${req.path}`,
+    availableEndpoints: ['/', '/api/health', '/api/test']
   });
 });
 
-// Handle favicon.ico
-app.get('/favicon.ico', (req, res) => {
-  res.status(204).end(); // No content for favicon
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({
-    success: false,
-    error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
-  });
-});
-
-// Middleware to handle CORS
-const corsMiddleware = (req, res, next) => {
-  // Allow all origins for now (in production, restrict this to your frontend URLs)
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  next();
-};
-
-// Apply CORS middleware to all routes
-app.use(corsMiddleware);
+// Create HTTP server
+const server = createServer(app);
 
 // Export the Vercel serverless function
-module.exports = (req, res) => {
-  return app(req, res);
+module.exports = async (req, res) => {
+  // Fix for Vercel serverless functions
+  req.url = req.url.replace(/^\/api/, '');
+  if (!req.url.startsWith('/')) {
+    req.url = `/${req.url}`;
+  }
+  
+  // Handle request
+  await new Promise((resolve) => {
+    const { end: originalEnd } = res;
+    res.end = function() {
+      originalEnd.apply(this, arguments);
+      resolve();
+    };
+    
+    server.emit('request', req, res);
+  });
 };
