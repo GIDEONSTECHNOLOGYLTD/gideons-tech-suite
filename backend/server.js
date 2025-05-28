@@ -41,10 +41,28 @@ console.log('===========================\n'.blue);
 app.use(helmet());
 
 // Enable CORS
-app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true
-}));
+const corsOptions = {
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'https://frontend-t73t.onrender.com',
+      'http://localhost:3000'
+    ];
+    // allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Rate limiting
 app.use(apiLimiter);
