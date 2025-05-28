@@ -6,23 +6,11 @@
       "use": "@vercel/node"
     }
   ],
-  "routes": [
-    {
-      "src": "/socket.io/?(.*)",
-      "dest": "/api/index.js"
-    },
-    {
-      "src": "/ws/?(.*)",
-      "dest": "/api/index.js"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/$1"
-    }
+  "rewrites": [
+    { "source": "/socket.io/(.*)", "destination": "/api/index.js" },
+    { "source": "/ws/(.*)", "destination": "/api/index.js" },
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/api/$1" }
   ],
   "env": {
     "NODE_ENV": "production",
