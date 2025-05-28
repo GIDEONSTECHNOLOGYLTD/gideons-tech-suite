@@ -67,3 +67,8 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+.vercel
+
+# Environment files
+.env
+backend/.env
