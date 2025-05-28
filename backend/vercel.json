@@ -4,43 +4,13 @@
     {
       "src": "api/index.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "api/minimal.js",
-      "use": "@vercel/node"
     }
   ],
-  "rewrites": [
-    { "source": "/socket.io/(.*)", "destination": "/api/index.js" },
-    { "source": "/ws/(.*)", "destination": "/api/index.js" },
-    { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/(.*)", "destination": "/api/$1" }
-  ],
-  "env": {
-    "NODE_ENV": "production",
-    "WEBSOCKET_PATH": "/ws"
-  },
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Credentials", "value": "true" },
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,OPTIONS,PATCH,DELETE,POST,PUT" },
-        { "key": "Access-Control-Allow-Headers", "value": "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, Upgrade, Connection" },
-        { "key": "Upgrade", "value": "$http_upgrade" },
-        { "key": "Connection", "value": "upgrade" }
-      ]
-    },
-    {
-      "source": "/ws/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "*" },
-        { "key": "Upgrade", "value": "$http_upgrade" },
-        { "key": "Connection", "value": "upgrade" }
-      ]
-    }
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/test", "dest": "/api/test" },
+    { "src": "/health", "dest": "/api/health" },
+    { "src": "/", "dest": "/api/" },
+    { "src": "/(.*)", "dest": "/api/$1" }
   ]
 }
