@@ -32,9 +32,8 @@ const logger = (req, res, next) => {
       console.log(`[${logData.timestamp}] ${logData.method} ${logData.url} - ${logData.status} (${logData.responseTime})`);
     }
     
-    // Log to console in all environments
+        // Log to console in all environments
     logToConsole(logData);
-    }
     
     // Clean up the event listener
     res.removeListener('finish', logRequest);
