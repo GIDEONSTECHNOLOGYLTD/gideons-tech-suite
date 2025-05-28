@@ -4,6 +4,15 @@ const { createServer } = require('http');
 // Create a simple Express app
 const app = express();
 
+// Simple test endpoint at the root
+app.get('/test', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Test endpoint is working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Enable CORS for all routes
 app.use((req, res, next) => {
   // Allow all origins for now (restrict in production)
