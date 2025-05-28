@@ -4,22 +4,42 @@ const { createServer } = require('http');
 // Create a simple Express app
 const app = express();
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// CORS middleware
+// Enable CORS for all routes
 app.use((req, res, next) => {
+  // Allow all origins for now (restrict in production)
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   
-  // Handle preflight
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
   
   next();
+});
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Simple test endpoint (no auth required)
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    message: 'API is healthy!'
+  });
+});
+
+// Public test endpoint
+app.get('/api/test', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Public test endpoint is working!',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Root endpoint
@@ -29,28 +49,12 @@ app.get('/', (req, res) => {
     message: 'Welcome to Gideon\'s Tech Suite API',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
     endpoints: {
       health: '/api/health',
       test: '/api/test',
       root: '/'
     }
-  });
-});
-
-// Simple test endpoint
-app.get('/api/test', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'API is working!',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
-    timestamp: new Date().toISOString()
   });
 });
 
@@ -68,7 +72,10 @@ app.all('*', (req, res) => {
 const server = createServer(app);
 
 // Export the Vercel serverless function
-module.exports = async (req, res) => {
+module.exports = (req, res) => {
+  // Log request for debugging
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  
   // Fix for Vercel serverless functions
   req.url = req.url.replace(/^\/api/, '');
   if (!req.url.startsWith('/')) {
@@ -76,13 +83,5 @@ module.exports = async (req, res) => {
   }
   
   // Handle request
-  await new Promise((resolve) => {
-    const { end: originalEnd } = res;
-    res.end = function() {
-      originalEnd.apply(this, arguments);
-      resolve();
-    };
-    
-    server.emit('request', req, res);
-  });
+  server.emit('request', req, res);
 };
