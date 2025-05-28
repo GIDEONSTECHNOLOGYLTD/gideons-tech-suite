@@ -44,11 +44,19 @@ class EnvConfig {
       }
     };
     
-    // Define sensitive keys that should be masked in logs
+        // Define sensitive keys that should be masked in logs
     this.sensitiveKeys = [
       'SECRET', 'PASSWORD', 'TOKEN', 'KEY', 'MONGODB_URI', 'JWT', 'API_KEY',
       'AUTH', 'CREDENTIAL', 'PWD', 'PRIVATE', 'ENCRYPT', 'DECRYPT', 'SIGNATURE'
     ];
+    
+    // Check if running in production
+    this.isProduction = () => {
+      return process.env.NODE_ENV === 'production' || 
+             process.env.VERCEL_ENV === 'production' ||
+             process.env.NOW_REGION ||
+             process.env.VERCEL === '1';
+    };
     
     // Skip these environment variables in logs
     this.skipLoggingKeys = [
