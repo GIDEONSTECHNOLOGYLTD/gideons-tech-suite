@@ -1,23 +1,9 @@
-const fs = require('fs');
-const path = require('path');
 const { format } = require('date-fns');
 
-// Create logs directory if it doesn't exist
-const logsDir = path.join(__dirname, '../../logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir);
-}
-
-// Log to file function
-const logToFile = (logData) => {
-  try {
-    const logFile = path.join(logsDir, `${format(new Date(), 'yyyy-MM-dd')}.log`);
-    const logEntry = `[${format(new Date(), 'yyyy-MM-dd HH:mm:ss')}] ${JSON.stringify(logData)}\n`;
-    
-    fs.appendFileSync(logFile, logEntry, 'utf8');
-  } catch (error) {
-    console.error('Error writing to log file:', error);
-  }
+// Log to console in all environments
+const logToConsole = (logData) => {
+  const timestamp = format(new Date(), 'yyyy-MM-dd HH:mm:ss');
+  console.log(`[${timestamp}]`, JSON.stringify(logData));
 };
 
 // Request logger middleware
@@ -46,9 +32,8 @@ const logger = (req, res, next) => {
       console.log(`[${logData.timestamp}] ${logData.method} ${logData.url} - ${logData.status} (${logData.responseTime})`);
     }
     
-    // Log to file in production
-    if (process.env.NODE_ENV === 'production') {
-      logToFile(logData);
+    // Log to console in all environments
+    logToConsole(logData);
     }
     
     // Clean up the event listener
@@ -105,5 +90,5 @@ const errorLogger = (err, req, res, next) => {
 module.exports = {
   logger,
   errorLogger,
-  logToFile
+  logToFile: logToConsole // Keep the same interface but use console logging
 };
