@@ -25,11 +25,16 @@ app.use(express.urlencoded({ extended: true }));
 
 // Simple test endpoint (no auth required)
 app.get('/api/health', (req, res) => {
+  // Bypass any authentication for health check
+  console.log('Health check called');
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    message: 'API is healthy!'
+    message: 'API is healthy!',
+    nodeVersion: process.version,
+    platform: process.platform,
+    memoryUsage: process.memoryUsage()
   });
 });
 
