@@ -5,8 +5,13 @@
   "main": "server.js",
   "type": "commonjs",
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=14.0.0",
+    "npm": ">=6.0.0"
   },
+  "cacheDirectories": [
+    "node_modules",
+    ".next/cache"
+  ],
   "scripts": {
     "start": "node server.js",
     "vercel-build": "echo \"Building for Vercel...\" && npm install",
@@ -20,9 +25,6 @@
     "test:dev": "nodemon public/server.js",
     "heroku-postbuild": "npm install"
   },
-  "cacheDirectories": [
-    "node_modules"
-  ],
   "dependencies": {
     "@logtail/node": "^0.5.5",
     "@logtail/winston": "^0.5.5",

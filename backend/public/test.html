@@ -106,47 +106,89 @@
       }
 
       // Handle Vercel OAuth callback
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get('code');
-      const error = urlParams.get('error');
-      
-      if (error) {
-        showError(authStatus, `OAuth Error: ${error}. ${urlParams.get('error_description') || ''}`);
-      } else if (code) {
-        // Remove code from URL without page reload
-        window.history.replaceState({}, document.title, window.location.pathname);
-        handleVercelCallback(code);
-      }
+      document.addEventListener('DOMContentLoaded', () => {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const code = urlParams.get('code');
+          const error = urlParams.get('error');
+          const errorDescription = urlParams.get('error_description');
+          
+          console.log('OAuth callback received:', { code, error, errorDescription });
+          
+          if (error) {
+            const errorMsg = `OAuth Error: ${error}${errorDescription ? ` - ${errorDescription}` : ''}`;
+            console.error(errorMsg);
+            showError(authStatus, errorMsg);
+          } else if (code) {
+            // Show loading state
+            showLoading(authStatus, 'Completing authentication...');
+            
+            // Remove code from URL without page reload
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            // Process the authorization code
+            handleVercelCallback(code);
+          }
+        } catch (error) {
+          console.error('Error in OAuth callback handler:', error);
+          showError(authStatus, `Error processing OAuth response: ${error.message}`);
+        }
+      });
 
       authBtn.addEventListener('click', startAuth);
       testHelloBtn.addEventListener('click', () => testEndpoint('/api/hello'));
       testHealthBtn.addEventListener('click', () => testEndpoint('/api/health'));
 
       function startAuth() {
-        const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
-        const authUrl = new URL('https://vercel.com/oauth/authorize');
-        authUrl.searchParams.append('client_id', 'T03NlOIIgkkS7SSIBfFZPUsP');
-        authUrl.searchParams.append('redirect_uri', redirectUri);
-        authUrl.searchParams.append('state', 'random-state-string');
-        authUrl.searchParams.append('scope', 'identity');
-        window.location.href = authUrl.toString();
+        try {
+          // Create a proper redirect URI
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          const path = '/test.html';
+          const redirectUri = `${protocol}//${host}${path}`;
+          
+          console.log('Initiating OAuth with redirect URI:', redirectUri);
+          
+          // Create the authorization URL
+          const authUrl = new URL('https://vercel.com/oauth/authorize');
+          authUrl.searchParams.append('client_id', 'T03NlOIIgkkS7SSIBfFZPUsP');
+          authUrl.searchParams.append('redirect_uri', redirectUri);
+          authUrl.searchParams.append('state', 'random-state-string');
+          authUrl.searchParams.append('scope', 'user:email');
+          authUrl.searchParams.append('response_type', 'code');
+          
+          console.log('Redirecting to:', authUrl.toString());
+          window.location.href = authUrl.toString();
+        } catch (error) {
+          console.error('Error in startAuth:', error);
+          showError(authStatus, `Error initializing authentication: ${error.message}`);
+        }
       }
 
       async function handleVercelCallback(code) {
         try {
           showLoading(authStatus, 'Completing authentication with Vercel...');
           
+          // Get the current URL without query parameters
+          const redirectUri = window.location.origin + window.location.pathname;
+          
+          console.log('Exchanging code for token...');
           const response = await fetch('/api/auth/vercel', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ code })
+            body: JSON.stringify({ 
+              code,
+              redirect_uri: redirectUri
+            })
           });
           
           const data = await response.json();
           
           if (response.ok && data.token) {
+            console.log('Successfully obtained access token');
+            
             // Store token and expiry (using expires_in from response or default to 1 hour)
             const expiresIn = data.expires_in || 3600;
             const expiry = new Date().getTime() + (expiresIn * 1000);
@@ -161,7 +203,9 @@
             // Clear any error messages
             apiResult.textContent = '';
           } else {
-            throw new Error(data.error || 'Authentication failed: No token received');
+            const errorMsg = data.error || data.details || 'No token received';
+            console.error('Token exchange failed:', errorMsg);
+            throw new Error(`Authentication failed: ${errorMsg}`);
           }
         } catch (error) {
           console.error('Auth error:', error);

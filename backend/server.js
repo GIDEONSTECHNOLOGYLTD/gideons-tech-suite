@@ -179,12 +179,30 @@ const initServer = async () => {
 };
 
 // Export the app and init function
-module.exports = {
-  app,
-  init: initServer
+module.exports = async (req, res) => {
+  try {
+    // Initialize the server if not already done
+    if (!app._initialized) {
+      await initServer();
+      app._initialized = true;
+    }
+    // Forward the request to the Express app
+    return app(req, res);
+  } catch (error) {
+    console.error('Serverless function error:', error);
+    res.status(500).json({ 
+      error: 'Internal Server Error',
+      message: error.message 
+    });
+  }
 };
 
-// Start the server if this file is run directly
+// Start the server if this file is run directly (for local development)
 if (require.main === module) {
-  initServer();
+  initServer().then(() => {
+    console.log('Server started in standalone mode');
+  }).catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
 }
