@@ -47,11 +47,11 @@ app.use(helmet());
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
-      'https://frontend-t73t.onrender.com',
+      'https://gideons-tech-frontend.vercel.app',
       'http://localhost:3000',
-      'http://localhost:3001', // Test server
-      'https://gideons-tech-suite.vercel.app', // Production frontend
-      /^https:\/\/gideons-tech-suite-.*\.vercel\.app$/ // Vercel preview URLs
+      'http://localhost:3001',
+      /^https:\/\/gideons-tech-frontend-.*\.vercel\.app$/, // Vercel preview URLs
+      /^https:\/\/gideons-tech-suite-.*\.vercel\.app$/ // Legacy Vercel URLs
     ];
     
     // allow requests with no origin (like mobile apps or curl requests)
