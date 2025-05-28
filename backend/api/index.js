@@ -47,6 +47,11 @@ app.all('*', (req, res) => {
   });
 });
 
+// Handle favicon.ico
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end(); // No content for favicon
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
