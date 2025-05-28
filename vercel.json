@@ -34,8 +34,5 @@
       "src": "^/(.*)",
       "dest": "frontend/build/index.html"
     }
-  ],
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
