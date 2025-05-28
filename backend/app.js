@@ -94,8 +94,7 @@ app.use(hpp());
 // Enable CORS
 app.use(cors());
 
-// Set static folder
-app.use(express.static(path.join(__dirname, 'public')));
+// Static file serving removed - frontend is served separately
 
 // Logging middleware
 app.use((req, res, next) => {

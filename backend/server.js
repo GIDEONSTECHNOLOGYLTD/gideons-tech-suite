@@ -40,6 +40,9 @@ console.log('===========================\n'.blue);
 // Set security headers
 app.use(helmet());
 
+// Remove static file serving - frontend is served separately
+// app.use(express.static(path.join(__dirname, 'public')));
+
 // Enable CORS
 const corsOptions = {
   origin: function (origin, callback) {
