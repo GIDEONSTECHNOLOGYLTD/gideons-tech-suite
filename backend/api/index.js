@@ -43,28 +43,26 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Export the Vercel serverless function
-module.exports = (req, res) => {
-  // Set CORS headers
-  const allowedOrigins = [
-    'https://frontend-t73t.onrender.com',
-    'http://localhost:3000',
-    'https://gideons-tech-suite.vercel.app'
-  ];
-  
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
+// Middleware to handle CORS
+const corsMiddleware = (req, res, next) => {
+  // Allow all origins for now (in production, restrict this to your frontend URLs)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
   
-  // Forward the request to the Express app
+  next();
+};
+
+// Apply CORS middleware to all routes
+app.use(corsMiddleware);
+
+// Export the Vercel serverless function
+module.exports = (req, res) => {
   return app(req, res);
 };
