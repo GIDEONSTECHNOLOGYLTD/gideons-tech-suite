@@ -108,8 +108,13 @@
       // Handle Vercel OAuth callback
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
+      const error = urlParams.get('error');
       
-      if (code) {
+      if (error) {
+        showError(authStatus, `OAuth Error: ${error}. ${urlParams.get('error_description') || ''}`);
+      } else if (code) {
+        // Remove code from URL without page reload
+        window.history.replaceState({}, document.title, window.location.pathname);
         handleVercelCallback(code);
       }
 
@@ -119,12 +124,17 @@
 
       function startAuth() {
         const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
-        window.location.href = `https://vercel.com/sso-api?url=${redirectUri}`;
+        const authUrl = new URL('https://vercel.com/oauth/authorize');
+        authUrl.searchParams.append('client_id', 'T03NlOIIgkkS7SSIBfFZPUsP');
+        authUrl.searchParams.append('redirect_uri', redirectUri);
+        authUrl.searchParams.append('state', 'random-state-string');
+        authUrl.searchParams.append('scope', 'identity');
+        window.location.href = authUrl.toString();
       }
 
       async function handleVercelCallback(code) {
         try {
-          showLoading(authStatus, 'Authenticating with Vercel...');
+          showLoading(authStatus, 'Completing authentication with Vercel...');
           
           const response = await fetch('/api/auth/vercel', {
             method: 'POST',
@@ -136,9 +146,11 @@
           
           const data = await response.json();
           
-          if (response.ok) {
-            // Store token and expiry (1 hour from now)
-            const expiry = new Date().getTime() + 3600 * 1000;
+          if (response.ok && data.token) {
+            // Store token and expiry (using expires_in from response or default to 1 hour)
+            const expiresIn = data.expires_in || 3600;
+            const expiry = new Date().getTime() + (expiresIn * 1000);
+            
             localStorage.setItem('vercel_token', data.token);
             localStorage.setItem('vercel_token_expiry', expiry.toString());
             
@@ -146,14 +158,15 @@
             showAuthenticatedUI();
             showSuccess(authStatus, 'Successfully authenticated with Vercel!');
             
-            // Clean up URL
-            window.history.replaceState({}, document.title, window.location.pathname);
+            // Clear any error messages
+            apiResult.textContent = '';
           } else {
-            throw new Error(data.error || 'Authentication failed');
+            throw new Error(data.error || 'Authentication failed: No token received');
           }
         } catch (error) {
           console.error('Auth error:', error);
           showError(authStatus, `Authentication failed: ${error.message}`);
+          clearAuth();
         }
       }
 

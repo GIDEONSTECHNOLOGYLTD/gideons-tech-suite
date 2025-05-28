@@ -32,25 +32,33 @@ app.use(express.json());
 // Handle preflight requests
 app.options('*', cors());
 
-// Auth endpoint to exchange Vercel token for a session
+// Auth endpoint to exchange Vercel OAuth code for an access token
 app.post('/api/auth/vercel', async (req, res) => {
   try {
     const { code } = req.body;
-    
-    // Exchange the code for an access token
-    const response = await axios.post('https://api.vercel.com/v2/oauth/access_token', {
+    const redirectUri = req.headers.referer ? 
+      new URL(req.headers.referer).origin + '/test.html' :
+      `${req.protocol}://${req.get('host')}/test.html`;
+
+    // Exchange the authorization code for an access token
+    const response = await axios.post('https://api.vercel.com/v2/oauth/access_token', new URLSearchParams({
       client_id: process.env.VERCEL_CLIENT_ID,
       client_secret: process.env.VERCEL_CLIENT_SECRET,
       code,
-      redirect_uri: req.headers.referer || `${req.protocol}://${req.get('host')}/test.html`
-    }, {
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code'
+    }), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       }
     });
-    
-    // Return the access token to the client
-    res.json({ token: response.data.access_token });
+
+    // Return the access token and other relevant data
+    res.json({
+      token: response.data.access_token,
+      expires_in: response.data.expires_in,
+      token_type: response.data.token_type
+    });
   } catch (error) {
     console.error('Auth error:', error.response?.data || error.message);
     res.status(500).json({
