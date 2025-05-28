@@ -7,6 +7,20 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Welcome to Gideon\'s Tech Suite API',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/api/health',
+      test: '/api/test'
+    }
+  });
+});
+
 // Simple test endpoint
 app.get('/api/test', (req, res) => {
   res.status(200).json({
