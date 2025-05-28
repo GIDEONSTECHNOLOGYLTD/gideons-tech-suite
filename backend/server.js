@@ -113,9 +113,9 @@ const allowedOrigins = [
   'http://localhost:3001',
   'https://frontend-t73t.onrender.com',
   'https://gideons-tech-suite.onrender.com',
-  'https://gideons-tech-suite-frontend.onrender.com',
-  'https://gideons-tech-suite.vercel.app',
-  'https://gideons-tech-suite-frontend.vercel.app'
+  'https://backend-acn2mi5qw-gideonstechnologyltds-projects.vercel.app',
+  'https://gideons-tech-suite-frontend.vercel.app',
+  'https://gideons-tech-suite.vercel.app'
 ];
 
 // Log allowed origins for debugging
