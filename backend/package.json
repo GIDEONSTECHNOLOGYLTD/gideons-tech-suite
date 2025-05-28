@@ -14,16 +14,14 @@
   ],
   "scripts": {
     "start": "node server.js",
-    "vercel-build": "echo \"Building for Vercel...\" && npm install",
     "dev": "nodemon server.js",
+    "build": "echo \"Building for production...\"",
+    "vercel-build": "npm install && npm run build",
     "test": "NODE_ENV=test jest --detectOpenHandles --forceExit",
     "test:unit": "NODE_ENV=test jest --detectOpenHandles --forceExit tests/unit/**/*.test.js",
     "test:integration": "NODE_ENV=test jest --detectOpenHandles --forceExit tests/unit/controllers/auth.integration.test.js",
     "test:watch": "NODE_ENV=test jest --watch",
-    "test:coverage": "NODE_ENV=test jest --coverage",
-    "test:server": "node public/server.js",
-    "test:dev": "nodemon public/server.js",
-    "heroku-postbuild": "npm install"
+    "test:coverage": "NODE_ENV=test jest --coverage"
   },
   "dependencies": {
     "@logtail/node": "^0.5.5",
