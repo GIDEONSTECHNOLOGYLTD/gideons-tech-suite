@@ -5,29 +5,18 @@
       "src": "frontend/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "build",
-        "cleanUrls": true
+        "distDir": "build"
       }
     },
     {
       "src": "backend/server.js",
-      "use": "@vercel/node",
-      "config": {
-        "maxLambdaSize": "15mb",
-        "includeFiles": ["**/*.json", "**/*.env"]
-      }
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/(?<path>.+)",
+      "src": "/api/(.*)",
       "dest": "backend/server.js"
-    },
-    {
-      "src": "/_next/static/(?:[^/]+/pages|chunks|runtime|css|media)/.+",
-      "headers": {
-        "cache-control": "public, max-age=31536000, immutable"
-      }
     },
     {
       "src": "/static/(.*)",
@@ -37,9 +26,5 @@
       "src": "/(.*)",
       "dest": "frontend/build/index.html"
     }
-  ],
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "backend/server.js" },
-    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
