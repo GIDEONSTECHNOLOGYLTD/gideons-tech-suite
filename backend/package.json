@@ -16,6 +16,8 @@
     "test:integration": "NODE_ENV=test jest --detectOpenHandles --forceExit tests/unit/controllers/auth.integration.test.js",
     "test:watch": "NODE_ENV=test jest --watch",
     "test:coverage": "NODE_ENV=test jest --coverage",
+    "test:server": "node public/server.js",
+    "test:dev": "nodemon public/server.js",
     "heroku-postbuild": "npm install"
   },
   "cacheDirectories": [
@@ -37,6 +39,7 @@
     "express-validator": "^7.2.1",
     "helmet": "^7.1.0",
     "hpp": "^0.2.3",
+    "http-proxy-middleware": "^2.0.9",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.2",
     "moment": "^2.30.1",

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-container {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #0070f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>API Test Page</h1>
+    
+    <div class="test-container">
+        <h2>Test API Endpoint</h2>
+        <button onclick="testEndpoint('/api/hello')">Test /api/hello</button>
+        <button onclick="testEndpoint('/api/health')">Test /api/health</button>
+        <div id="result">
+            <p>Click a button to test an endpoint</p>
+        </div>
+    </div>
+
+    <script>
+        async function testEndpoint(endpoint) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                // Use the CORS proxy endpoint
+                const response = await fetch(`/api/proxy${endpoint}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    mode: 'cors',
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP error! status: ${response.status}, response: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                resultDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <h3>Error testing ${endpoint}:</h3>
+                    <pre>${error.message}</pre>
+                    <p>Check the browser console for more details.</p>
+                `;
+                console.error('Error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
