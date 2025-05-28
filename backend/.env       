@@ -1,0 +1,4 @@
+MONGODB_URI=mongodb+srv://gideonainaaina:t54mFVwQ2zVXNB20@gtech.sn57hxm.mongodb.net/gideons_tech_suite?retryWrites=true&w=majority&appName=GTECH
+JWT_SECRET=43863680fb11748f3c2eee5dfa8af40fb670f82d96f49c415c93bb3efd11697c
+FRONTEND_URL=http://localhost:3000
+NODE_ENV=development
