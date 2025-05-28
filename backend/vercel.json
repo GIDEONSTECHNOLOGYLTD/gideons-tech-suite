@@ -4,9 +4,14 @@
     {
       "src": "api/index.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/status.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
+    { "src": "/status", "dest": "/api/status.js" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/test", "dest": "/api/test" },
     { "src": "/health", "dest": "/api/health" },
