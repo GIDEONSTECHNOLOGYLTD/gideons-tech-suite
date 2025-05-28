@@ -9,6 +9,7 @@
   ],
   "routes": [
     { "src": "/api/public-test", "dest": "/api/public-test.js" },
+    { "src": "/api/db-test", "dest": "/api/db-test.js" },
     { "src": "/api/status", "dest": "/api/status.js" },
     { "src": "/api/health", "dest": "/api/health.js" },
     { "src": "/api/(.*)", "dest": "/api/index.js" },

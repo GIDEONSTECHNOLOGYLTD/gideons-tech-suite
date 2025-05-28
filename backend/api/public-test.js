@@ -10,6 +10,12 @@ module.exports = (req, res) => {
     return res.status(200).end();
   }
 
+  // Add cache control headers to prevent caching
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+
   // Return a simple response
   return res.status(200).json({
     success: true,
@@ -18,8 +24,15 @@ module.exports = (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     vercel: {
       isVercel: process.env.VERCEL === '1',
-      region: process.env.NOW_REGION || 'unknown',
+      region: process.env.VERCEL_REGION || 'unknown',
       url: process.env.VERCEL_URL || 'unknown'
+    },
+    headers: {
+      // Return the request headers for debugging
+      request: Object.entries(req.headers).reduce((acc, [key, value]) => {
+        acc[key] = typeof value === 'object' ? JSON.stringify(value) : value;
+        return acc;
+      }, {})
     }
   });
 };
