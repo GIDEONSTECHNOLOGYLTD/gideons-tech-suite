@@ -1,86 +1,229 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>API Test</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .test-container {
-            margin: 20px 0;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        button {
-            padding: 8px 16px;
-            background-color: #0070f3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 10px;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        pre {
-            background-color: #f5f5f5;
-            padding: 10px;
-            border-radius: 4px;
-            overflow-x: auto;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Test Page</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .section {
+      margin-bottom: 20px;
+      padding: 20px;
+      border: 1px solid #eaeaea;
+      border-radius: 8px;
+      background-color: #f9f9f9;
+    }
+    .hidden {
+      display: none;
+    }
+    .result {
+      padding: 15px;
+      border-radius: 4px;
+    }
+    .result.success {
+      background-color: #dff0d8;
+      border-color: #d6e9c6;
+      color: #3c763d;
+    }
+    .result.error {
+      background-color: #f2dede;
+      border-color: #ebccd1;
+      color: #a94442;
+    }
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(0,0,0,.1);
+      border-radius: 50%;
+      border-top-color: #0070f3;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 10px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .btn {
+      padding: 10px 20px;
+      background-color: #0070f3;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+      transition: background-color 0.2s;
+    }
+    .btn:hover {
+      background-color: #0056b3;
+    }
+  </style>
 </head>
 <body>
+  <div class="container">
     <h1>API Test Page</h1>
     
-    <div class="test-container">
-        <h2>Test API Endpoint</h2>
-        <button onclick="testEndpoint('/api/hello')">Test /api/hello</button>
-        <button onclick="testEndpoint('/api/health')">Test /api/health</button>
-        <div id="result">
-            <p>Click a button to test an endpoint</p>
-        </div>
+    <div class="section">
+      <h2>Authentication</h2>
+      <button id="authBtn" class="btn">Login with Vercel</button>
+      <div id="authStatus" class="result hidden"></div>
     </div>
 
-    <script>
-        async function testEndpoint(endpoint) {
-            const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = 'Testing...';
+    <div id="apiSection" class="section hidden">
+      <h2>API Endpoints</h2>
+      <div>
+        <button id="testHelloBtn" class="btn">Test /api/hello</button>
+        <button id="testHealthBtn" class="btn">Test /api/health</button>
+      </div>
+      <div id="apiResult" class="result"></div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const authBtn = document.getElementById('authBtn');
+      const authStatus = document.getElementById('authStatus');
+      const apiSection = document.getElementById('apiSection');
+      const testHelloBtn = document.getElementById('testHelloBtn');
+      const testHealthBtn = document.getElementById('testHealthBtn');
+      const apiResult = document.getElementById('apiResult');
+
+      let authToken = localStorage.getItem('vercel_token');
+      let tokenExpiry = localStorage.getItem('vercel_token_expiry');
+
+      // Check if token is expired
+      if (authToken && tokenExpiry && new Date().getTime() < parseInt(tokenExpiry)) {
+        showAuthenticatedUI();
+      } else {
+        clearAuth();
+      }
+
+      // Handle Vercel OAuth callback
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      
+      if (code) {
+        handleVercelCallback(code);
+      }
+
+      authBtn.addEventListener('click', startAuth);
+      testHelloBtn.addEventListener('click', () => testEndpoint('/api/hello'));
+      testHealthBtn.addEventListener('click', () => testEndpoint('/api/health'));
+
+      function startAuth() {
+        const redirectUri = encodeURIComponent(window.location.origin + window.location.pathname);
+        window.location.href = `https://vercel.com/sso-api?url=${redirectUri}`;
+      }
+
+      async function handleVercelCallback(code) {
+        try {
+          showLoading(authStatus, 'Authenticating with Vercel...');
+          
+          const response = await fetch('/api/auth/vercel', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ code })
+          });
+          
+          const data = await response.json();
+          
+          if (response.ok) {
+            // Store token and expiry (1 hour from now)
+            const expiry = new Date().getTime() + 3600 * 1000;
+            localStorage.setItem('vercel_token', data.token);
+            localStorage.setItem('vercel_token_expiry', expiry.toString());
             
-            try {
-                // Use the CORS proxy endpoint
-                const response = await fetch(`/api/proxy${endpoint}`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    mode: 'cors',
-                    credentials: 'include'
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP error! status: ${response.status}, response: ${errorText}`);
-                }
-                
-                const data = await response.json();
-                resultDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-            } catch (error) {
-                resultDiv.innerHTML = `
-                    <h3>Error testing ${endpoint}:</h3>
-                    <pre>${error.message}</pre>
-                    <p>Check the browser console for more details.</p>
-                `;
-                console.error('Error:', error);
-            }
+            // Update UI
+            showAuthenticatedUI();
+            showSuccess(authStatus, 'Successfully authenticated with Vercel!');
+            
+            // Clean up URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } else {
+            throw new Error(data.error || 'Authentication failed');
+          }
+        } catch (error) {
+          console.error('Auth error:', error);
+          showError(authStatus, `Authentication failed: ${error.message}`);
         }
-    </script>
+      }
+
+      function showAuthenticatedUI() {
+        authBtn.textContent = 'Logout';
+        authBtn.onclick = logout;
+        apiSection.classList.remove('hidden');
+      }
+
+      function logout() {
+        clearAuth();
+        window.location.reload();
+      }
+
+      function clearAuth() {
+        localStorage.removeItem('vercel_token');
+        localStorage.removeItem('vercel_token_expiry');
+        authBtn.textContent = 'Login with Vercel';
+        authBtn.onclick = startAuth;
+        apiSection.classList.add('hidden');
+        authStatus.classList.add('hidden');
+      }
+
+      async function testEndpoint(endpoint) {
+        try {
+          showLoading(apiResult, `Testing ${endpoint}...`);
+          
+          const response = await fetch(`/api/proxy${endpoint}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('vercel_token')}`
+            }
+          });
+          
+          const data = await response.json();
+          
+          if (response.ok) {
+            showSuccess(apiResult, JSON.stringify(data, null, 2));
+          } else {
+            throw new Error(data.error || `Request failed with status ${response.status}`);
+          }
+        } catch (error) {
+          console.error('API error:', error);
+          showError(apiResult, `Error: ${error.message}`);
+          
+          // Handle unauthorized errors
+          if (error.message.includes('401') || error.message.includes('403')) {
+            // Clear auth and update UI
+            clearAuth();
+            showError(authStatus, 'Your session has expired. Please log in again.');
+          }
+        }
+      }
+
+      function showLoading(element, message) {
+        element.innerHTML = `<span class="loading"></span>${message}`;
+        element.className = 'result';
+        element.classList.remove('hidden');
+      }
+
+      function showSuccess(element, message) {
+        element.textContent = message;
+        element.className = 'result success';
+      }
+
+      function showError(element, message) {
+        element.textContent = message;
+        element.className = 'result error';
+        element.classList.remove('hidden');
+      }
+    });
+  </script>
 </body>
 </html>
