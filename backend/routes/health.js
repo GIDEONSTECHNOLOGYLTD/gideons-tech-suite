@@ -19,11 +19,9 @@ router.get('*', async (req, res) => {
       version: version,
       environment: process.env.NODE_ENV || 'development',
       requestPath: req.path,
-      vercel: {
-        isVercel: process.env.VERCEL === '1',
-        region: process.env.NOW_REGION || 'unknown',
-        url: process.env.VERCEL_URL || 'unknown',
-        env: process.env.VERCEL_ENV || 'unknown'
+      environment: {
+        type: 'local-development',
+        mode: process.env.NODE_ENV || 'development'
       },
     
     // System information
