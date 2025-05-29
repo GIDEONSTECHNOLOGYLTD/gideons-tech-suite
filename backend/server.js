@@ -47,11 +47,7 @@ app.use(helmet());
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
-      'https://gideons-tech-suite.vercel.app',
-      'http://localhost:3000',
-      'http://localhost:3001',
-      /^https:\/\/gideons-tech-suite-.*\.vercel\.app$/, // Vercel preview URLs
-      /^https:\/\/gideons-tech-frontend-.*\.vercel\.app$/ // Legacy Vercel URLs
+      'http://localhost:3000'
     ];
     
     // allow requests with no origin (like mobile apps or curl requests)
@@ -126,31 +122,21 @@ app.use(errorHandler);
 // Initialize server
 const initServer = async () => {
   try {
-    // Set default values for required variables
+    // Set default environment values for local development
     if (!process.env.JWT_SECRET) {
       console.warn('Warning: JWT_SECRET not set. Using a default value. This is NOT secure for production!'.yellow);
       process.env.JWT_SECRET = 'insecure-default-secret-change-in-production';
     }
 
     if (!process.env.FRONTEND_URL) {
-      console.warn('Warning: FRONTEND_URL not set. Using default value.'.yellow);
-      process.env.FRONTEND_URL = 'https://gideons-tech-suite.onrender.com';
+      console.warn('FRONTEND_URL not set, using default'.yellow);
+      process.env.FRONTEND_URL = 'http://localhost:3000';
     }
-
-    // Check for MONGODB_URI as it's critical
+    
+    // Set default MongoDB URI if not provided
     if (!process.env.MONGODB_URI) {
-      console.error('Error: MONGODB_URI is required but not set'.red);
-      
-      // In production, try to use Render's internal MongoDB if available
-      if (process.env.NODE_ENV === 'production' && process.env.MONGODB_INTERNAL_URI) {
-        console.warn('Using MONGODB_INTERNAL_URI from Render environment'.yellow);
-        process.env.MONGODB_URI = process.env.MONGODB_INTERNAL_URI;
-      } else if (process.env.NODE_ENV === 'production') {
-        console.warn('Warning: Starting without MongoDB connection. Some features may not work.'.yellow);
-      } else {
-        console.warn('Using default MongoDB connection for development'.yellow);
-        process.env.MONGODB_URI = 'mongodb://localhost:27017/gideons-tech-suite';
-      }
+      console.warn('MONGODB_URI not set, using default local MongoDB'.yellow);
+      process.env.MONGODB_URI = 'mongodb://localhost:27017/gideons_tech_suite';
     }
 
     // Connect to database
@@ -193,67 +179,12 @@ const initServer = async () => {
 };
 
 // Export the app and init function
-module.exports = async (req, res) => {
-  try {
-    // Add basic health check endpoint that doesn't require initialization
-    if (req.url === '/api/health' || req.url === '/health') {
-      return res.status(200).json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development',
-        message: 'API is healthy!'
-      });
-    }
-    
-    // Initialize the server if not already done
-    if (!app._initialized) {
-      console.log('Initializing server for the first time');
-      try {
-        await initServer();
-        app._initialized = true;
-        console.log('Server initialization complete');
-      } catch (initError) {
-        console.error('Server initialization failed:', initError);
-        return res.status(500).json({
-          error: 'Server Initialization Failed',
-          message: initError.message,
-          stack: process.env.NODE_ENV === 'production' ? undefined : initError.stack
-        });
-      }
-    }
-    
-    // Special handling for WebSocket upgrade requests
-    if (req.method === 'GET' && req.url.startsWith('/ws')) {
-      // For WebSocket connections in Vercel environment
-      if (app.httpServer) {
-        console.log('WebSocket connection request received');
-        app.httpServer.emit('upgrade', req, res.socket, Buffer.from([]));
-        return;
-      } else {
-        console.error('WebSocket server not initialized');
-        return res.status(500).json({
-          error: 'WebSocket Not Available',
-          message: 'WebSocket server has not been initialized'
-        });
-      }
-    }
-    
-    // Forward the request to the Express app
-    return app(req, res);
-  } catch (error) {
-    console.error('Serverless function error:', error);
-    return res.status(500).json({ 
-      error: 'Internal Server Error',
-      message: error.message,
-      stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
-    });
-  }
-};
+module.exports = { app, initServer };
 
 // Start the server if this file is run directly (for local development)
 if (require.main === module) {
   initServer().then(() => {
-    console.log('Server started in standalone mode');
+    console.log('Server started successfully');
   }).catch(err => {
     console.error('Failed to start server:', err);
     process.exit(1);
