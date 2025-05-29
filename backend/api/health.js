@@ -1,31 +1,50 @@
-// Dedicated health check endpoint for Vercel serverless environment
-// This endpoint is public and does not require authentication
-module.exports = (req, res) => {
-  try {
-    // Set CORS headers to allow access from any origin
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    
-    // Handle preflight requests
-    if (req.method === 'OPTIONS') {
-      return res.status(200).end();
-    }
+// Health check endpoint for local development
+const express = require('express');
+const router = express.Router();
+const os = require('os');
+const mongoose = require('mongoose');
+const { version } = require('../../package.json');
+const { connectDB } = require('../config/db');
 
+/**
+ * @route   GET /api/health
+ * @desc    Health check endpoint with detailed system information
+ * @access  Public
+ */
+router.get('/', async (req, res) => {
+  try {
+    // Check database connection
+    let dbStatus = 'UNKNOWN';
+    let dbError = null;
+    
+    try {
+      if (mongoose.connection.readyState === 1) {
+        // Connection is already established
+        await mongoose.connection.db.admin().ping();
+        dbStatus = 'UP';
+      } else {
+        // Try to connect
+        await connectDB();
+        dbStatus = 'UP';
+      }
+    } catch (error) {
+      dbStatus = 'DOWN';
+      dbError = error.message;
+    }
+    
     // Return a detailed health check response
     return res.status(200).json({
       status: 'UP',
       timestamp: new Date().toISOString(),
       service: 'Gideon\'s Tech Suite API',
-      version: '1.0.0',
+      version: version,
       environment: process.env.NODE_ENV || 'development',
       
-      // Vercel-specific information
-      vercel: {
-        isVercel: process.env.VERCEL === '1',
-        region: process.env.NOW_REGION || 'unknown',
-        url: process.env.VERCEL_URL || 'unknown',
-        env: process.env.VERCEL_ENV || 'unknown'
+      // Database status
+      database: {
+        status: dbStatus,
+        error: dbError,
+        name: mongoose.connection.name || 'Not connected'
       },
       
       // System information
@@ -51,4 +70,6 @@ module.exports = (req, res) => {
       stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
     });
   }
-}
+});
+
+module.exports = router;
