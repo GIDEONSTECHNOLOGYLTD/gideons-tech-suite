@@ -16,7 +16,6 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build": "echo \"Building for production...\"",
-    "vercel-build": "npm install && npm run build",
     "test": "NODE_ENV=test jest --detectOpenHandles --forceExit",
     "test:unit": "NODE_ENV=test jest --detectOpenHandles --forceExit tests/unit/**/*.test.js",
     "test:integration": "NODE_ENV=test jest --detectOpenHandles --forceExit tests/unit/controllers/auth.integration.test.js",
