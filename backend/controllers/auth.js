@@ -2,12 +2,17 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
+const sendEmail = require('../utils/sendEmail');
+const config = require('../config/config');
 
-// Mock sendEmail function - replace with your actual email sending logic
-const sendEmail = async ({ email, subject, message }) => {
-  console.log(`Sending email to ${email} with subject: ${subject}`);
-  console.log(`Message: ${message}`);
-  return Promise.resolve();
+// Get WebSocket instance
+let wsInstance;
+const getWsInstance = () => {
+  if (!global.wsInstance) {
+    console.warn('WebSocket instance not available for auth notifications');
+    return null;
+  }
+  return global.wsInstance;
 };
 
 // @desc    Register user
@@ -49,11 +54,14 @@ exports.register = asyncHandler(async (req, res, next) => {
 // @access  Public
 exports.login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
-  console.log('Login attempt:', { email });
+  
+  // Only log in development environment
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Login attempt for:', email);
+  }
 
   // Validate email & password
   if (!email || !password) {
-    console.log('Login failed: Missing email or password');
     return next(new ErrorResponse('Please provide an email and password', 400));
   }
 
@@ -63,43 +71,43 @@ exports.login = asyncHandler(async (req, res, next) => {
       email: { $regex: new RegExp(`^${email}$`, 'i') } 
     }).select('+password');
 
-    console.log('User found:', user ? {
-      _id: user._id,
-      email: user.email,
-      role: user.role,
-      isActive: user.isActive,
-      passwordLength: user.password ? user.password.length : 0
-    } : 'No user found');
-
     if (!user) {
-      console.log('Login failed: User not found', { email });
       return next(new ErrorResponse('Invalid credentials', 401));
     }
 
     // Check if user is active
     if (!user.isActive) {
-      console.log('Login failed: User account is inactive', { email });
       return next(new ErrorResponse('Account is inactive. Please contact support.', 401));
     }
 
     // Check if password matches
-    console.log('Comparing password...');
     const isMatch = await user.matchPassword(password);
-    console.log('Password match result:', isMatch, { 
-      userId: user._id,
-      passwordLength: password.length,
-      hashedPasswordLength: user.password.length
-    });
 
     if (!isMatch) {
-      console.log('Login failed: Invalid password', { email });
       return next(new ErrorResponse('Invalid credentials', 401));
     }
 
-    console.log('Login successful, sending token response...');
+    // Send login notification via WebSocket if available
+    const ws = getWsInstance();
+    if (ws) {
+      ws.broadcast(
+        {
+          type: 'USER_LOGIN',
+          message: `User logged in: ${user.name || user.email}`,
+          data: {
+            userId: user._id,
+            name: user.name,
+            role: user.role,
+            timestamp: new Date().toISOString()
+          }
+        },
+        'auth'  // Channel name for authentication events
+      );
+    }
+
     sendTokenResponse(user, 200, res);
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Login error:', error.message);
     return next(new ErrorResponse('Login failed', 500));
   }
 });
@@ -171,27 +179,61 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
 
   await user.save({ validateBeforeSave: false });
 
-  // Create reset URL
-  const resetUrl = `${req.protocol}://${req.get('host')}/api/v1/auth/resetpassword/${resetToken}`;
+  // Determine frontend URL from config or environment variable
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
+  
+  // Create reset URL that points to the frontend app, not the API
+  const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
 
-  const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a PUT request to: \n\n ${resetUrl}`;
+  // Create HTML email with proper styling and button
+  const htmlMessage = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #333;">Password Reset Request</h2>
+      <p>You are receiving this email because a password reset was requested for your account.</p>
+      <p>Please click the button below to reset your password. This link will expire in 10 minutes.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${resetUrl}" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Reset Password</a>
+      </div>
+      <p>If you did not request a password reset, please ignore this email and your password will remain unchanged.</p>
+      <p>Regards,<br>Gideon's Tech Suite Team</p>
+    </div>
+  `;
+
+  const textMessage = `You are receiving this email because you (or someone else) has requested the reset of a password. Please go to this link to reset your password: ${resetUrl}`;
 
   try {
     await sendEmail({
-      email: user.email,
-      subject: 'Password reset token',
-      message
+      to: user.email,
+      subject: 'Password Reset - Gideon\'s Tech Suite',
+      text: textMessage,
+      html: htmlMessage
     });
 
-    res.status(200).json({ success: true, data: 'Email sent' });
+    // Send WebSocket notification if available
+    const ws = getWsInstance();
+    if (ws) {
+      ws.broadcast(
+        {
+          type: 'PASSWORD_RESET_REQUESTED',
+          message: `Password reset requested for: ${user.email}`,
+          data: {
+            userId: user._id,
+            timestamp: new Date().toISOString()
+          }
+        },
+        'auth'  // Channel name for authentication events
+      );
+    }
+
+    res.status(200).json({ success: true, data: 'Password reset email sent' });
   } catch (err) {
-    console.log(err);
+    console.error('Failed to send password reset email:', err.message);
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
 
     await user.save({ validateBeforeSave: false });
 
-    return next(new ErrorResponse('Email could not be sent', 500));
+    return next(new ErrorResponse(`Email could not be sent: ${err.message}`, 500));
   }
 });
 
@@ -247,6 +289,24 @@ exports.confirmEmail = asyncHandler(async (req, res, next) => {
   user.confirmEmailToken = undefined;
   await user.save({ validateBeforeSave: false });
 
+  // Send WebSocket notification for email confirmation
+  const ws = getWsInstance();
+  if (ws) {
+    ws.broadcast(
+      {
+        type: 'EMAIL_CONFIRMED',
+        message: `Email confirmed for user: ${user.name || user.email}`,
+        data: {
+          userId: user._id,
+          name: user.name,
+          email: user.email,
+          timestamp: new Date().toISOString()
+        }
+      },
+      'auth'  // Channel name for authentication events
+    );
+  }
+
   // Return token
   sendTokenResponse(user, 200, res);
 });
@@ -269,24 +329,59 @@ exports.resendConfirmationEmail = asyncHandler(async (req, res, next) => {
   const confirmToken = user.getConfirmEmailToken();
   await user.save({ validateBeforeSave: false });
 
-  // Create confirm email url
-  const confirmUrl = `${req.protocol}://${req.get('host')}/api/v1/auth/confirmemail/${confirmToken}`;
+  // Determine frontend URL from config or environment variable
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
 
-  const message = `You are receiving this email because you need to confirm your email address. Please make a GET request to: \n\n ${confirmUrl}`;
+  // Create confirm email url pointing to frontend
+  const confirmUrl = `${frontendUrl}/verify-email/${confirmToken}`;
+
+  // Create HTML email with proper styling and button
+  const htmlMessage = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #333;">Verify Your Email Address</h2>
+      <p>Thank you for registering with Gideon's Tech Suite. Please verify your email address to activate your account.</p>
+      <p>Click the button below to verify your email address:</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${confirmUrl}" style="background-color: #4285F4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Verify Email Address</a>
+      </div>
+      <p>If you did not create an account with us, please ignore this email.</p>
+      <p>Regards,<br>Gideon's Tech Suite Team</p>
+    </div>
+  `;
+
+  const textMessage = `Please verify your email address by clicking the following link: ${confirmUrl}`;
 
   try {
     await sendEmail({
-      email: user.email,
-      subject: 'Email confirmation token',
-      message
+      to: user.email,
+      subject: 'Verify Your Email - Gideon\'s Tech Suite',
+      text: textMessage,
+      html: htmlMessage
     });
 
-    res.status(200).json({ success: true, data: 'Email sent' });
+    // Send WebSocket notification if available
+    const ws = getWsInstance();
+    if (ws) {
+      ws.broadcast(
+        {
+          type: 'EMAIL_VERIFICATION_SENT',
+          message: `Email verification sent to: ${user.email}`,
+          data: {
+            userId: user._id,
+            email: user.email,
+            timestamp: new Date().toISOString()
+          }
+        },
+        'auth'  // Channel name for authentication events
+      );
+    }
+
+    res.status(200).json({ success: true, data: 'Verification email sent' });
   } catch (err) {
-    console.log(err);
+    console.error('Failed to send verification email:', err.message);
     user.confirmEmailToken = undefined;
     await user.save({ validateBeforeSave: false });
 
-    return next(new ErrorResponse('Email could not be sent', 500));
+    return next(new ErrorResponse(`Email could not be sent: ${err.message}`, 500));
   }
 });

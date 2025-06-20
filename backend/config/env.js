@@ -26,7 +26,9 @@ class EnvConfig {
         description: 'JWT secret key for authentication',
         validate: (value) => {
           if (!value) return 'is required';
-          if (value.length < 32) return 'must be at least 32 characters long';
+          if (process.env.NODE_ENV === 'production' && value.length < 32) {
+            return 'must be at least 32 characters long in production';
+          }
           return null;
         }
       },
@@ -109,12 +111,18 @@ class EnvConfig {
   
   loadEnvFile() {
     try {
-      const envPath = path.resolve(__dirname, '../../.env');
+      // Try to load from backend directory first
+      const envPath = path.resolve(__dirname, '../.env');
+      const rootEnvPath = path.resolve(__dirname, '../../.env');
+      
       if (fs.existsSync(envPath)) {
         require('dotenv').config({ path: envPath });
-        console.log('✅ Loaded .env file'.green);
+        console.log('✅ Loaded .env file from backend directory'.green);
+      } else if (fs.existsSync(rootEnvPath)) {
+        require('dotenv').config({ path: rootEnvPath });
+        console.log('✅ Loaded .env file from root directory'.green);
       } else if (process.env.NODE_ENV === 'development') {
-        console.warn('⚠️  Warning: .env file not found'.yellow);
+        console.warn('⚠️  Warning: .env file not found in backend or root directory'.yellow);
       }
     } catch (error) {
       console.error('❌ Error loading .env file:'.red, error.message);
